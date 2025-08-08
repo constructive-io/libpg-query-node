@@ -6,10 +6,8 @@
 WASM_OUT_DIR := wasm
 WASM_OUT_NAME := libpg-query
 WASM_MODULE_NAME := PgQueryModule
-# LIBPG_QUERY_REPO := https://github.com/pganalyze/libpg_query.git
-# LIBPG_QUERY_TAG := 15-4.2.4
-LIBPG_QUERY_REPO := https://github.com/launchql/libpg_query.git
-LIBPG_QUERY_TAG := fix/negative-int-pg15
+LIBPG_QUERY_REPO := https://github.com/pganalyze/libpg_query.git
+LIBPG_QUERY_TAG := 15-4.2.4
 
 CACHE_DIR := .cache
 
@@ -71,6 +69,8 @@ ifdef EMSCRIPTEN
 		-sMODULARIZE=1 \
 		-sEXPORT_ES6=0 \
 		-sALLOW_MEMORY_GROWTH=1 \
+		-sINITIAL_MEMORY=268435456 \
+		-sMAXIMUM_MEMORY=1073741824 \
 		-lpg_query \
 		-o $@ \
 		$(SRC_FILES)
