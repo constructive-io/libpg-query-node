@@ -185,6 +185,10 @@ pnpm run test
 - Ensure Emscripten SDK is properly installed and configured
 - Check that all required build dependencies are available
 
+**`.wasm` not found**
+- Usually occurs in Next.js/Webpack/Turbopack
+- see **[LOADING_WASM.md](./LOADING_WASM.md)**
+
 ### Template System
 
 To avoid duplication across PostgreSQL versions, common files are maintained in the `templates/` directory:

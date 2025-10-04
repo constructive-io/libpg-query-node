@@ -67,7 +67,9 @@ ifdef EMSCRIPTEN
 		-sEXPORTED_FUNCTIONS="['_malloc','_free','_wasm_parse_query_raw','_wasm_free_parse_result']" \
 		-sEXPORTED_RUNTIME_METHODS="['lengthBytesUTF8','stringToUTF8','getValue','UTF8ToString','HEAPU8','HEAPU32']" \
 		-sEXPORT_NAME="$(WASM_MODULE_NAME)" \
-		-sENVIRONMENT="web" \
+		-sENVIRONMENT="web,node,worker" \
+        -sASSERTIONS=0 \
+        -sSINGLE_FILE=0 \
 		-sMODULARIZE=1 \
 		-sEXPORT_ES6=0 \
 		-sALLOW_MEMORY_GROWTH=1 \

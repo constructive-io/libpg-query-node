@@ -60,7 +60,9 @@ ifdef EMSCRIPTEN
 		-sEXPORTED_FUNCTIONS="['_malloc','_free','_wasm_parse_query','_wasm_parse_query_protobuf','_wasm_get_protobuf_len','_wasm_deparse_protobuf','_wasm_parse_plpgsql','_wasm_fingerprint','_wasm_normalize_query','_wasm_scan','_wasm_parse_query_detailed','_wasm_free_detailed_result','_wasm_free_string','_wasm_parse_query_raw','_wasm_free_parse_result']" \
 		-sEXPORTED_RUNTIME_METHODS="['lengthBytesUTF8','stringToUTF8','UTF8ToString','getValue','HEAPU8','HEAPU32']" \
 		-sEXPORT_NAME="$(WASM_MODULE_NAME)" \
-		-sENVIRONMENT="web" \
+		-sENVIRONMENT="web,node,worker" \
+        -sASSERTIONS=0 \
+        -sSINGLE_FILE=0 \
 		-sMODULARIZE=1 \
 		-sEXPORT_ES6=0 \
 		-sALLOW_MEMORY_GROWTH=1 \
