@@ -34,7 +34,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "copyfiles": "^2.4.1",
-    "glob": "11.0.3",
+    "glob": "11.1.0",
     "pg-proto-parser": "^1.28.2",
     "rimraf": "^5.0.0",
     "ts-node": "^10.9.1",
