@@ -2,7 +2,7 @@
   "name": "@libpg-query/v13",
   "version": "13.5.7",
   "description": "The real PostgreSQL query parser",
-  "homepage": "https://github.com/launchql/libpg-query-node",
+  "homepage": "https://github.com/constructive-io/libpg-query-node",
   "main": "./wasm/index.cjs",
   "module": "./wasm/index.js",
   "typings": "./wasm/index.d.ts",
@@ -30,11 +30,11 @@
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
     "test": "node --test test/parsing.test.js test/errors.test.js"
   },
-  "author": "Dan Lynch <pyramation@gmail.com> (http://github.com/pyramation)",
-  "license": "LICENSE IN LICENSE",
+  "author": "Constructive <developers@constructive.io>",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/launchql/libpg-query-node.git"
+    "url": "git://github.com/constructive-io/libpg-query-node.git"
   },
   "devDependencies": {},
   "dependencies": {

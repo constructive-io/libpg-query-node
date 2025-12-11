@@ -6,7 +6,7 @@
   "main": "index.js",
   "module": "esm/index.js",
   "types": "index.d.ts",
-  "homepage": "https://github.com/launchql/libpg-query-node",
+  "homepage": "https://github.com/constructive-io/libpg-query-node",
   "license": "MIT",
   "publishConfig": {
     "access": "public",
@@ -14,10 +14,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/launchql/libpg-query-node"
+    "url": "https://github.com/constructive-io/libpg-query-node"
   },
   "bugs": {
-    "url": "https://github.com/launchql/libpg-query-node/issues"
+    "url": "https://github.com/constructive-io/libpg-query-node/issues"
   },
   "x-publish": {
     "publishName": "@pgsql/enums",

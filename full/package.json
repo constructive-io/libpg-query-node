@@ -2,7 +2,7 @@
   "name": "@libpg-query/parser",
   "version": "17.6.5",
   "description": "The real PostgreSQL query parser",
-  "homepage": "https://github.com/launchql/libpg-query-node",
+  "homepage": "https://github.com/constructive-io/libpg-query-node",
   "main": "./wasm/index.cjs",
   "module": "./wasm/index.js",
   "typings": "./wasm/index.d.ts",
@@ -26,11 +26,11 @@
     "yamlize": "node ./scripts/yamlize.js",
     "protogen": "node ./scripts/protogen.js"
   },
-  "author": "Dan Lynch <pyramation@gmail.com> (http://github.com/pyramation)",
-  "license": "LICENSE IN LICENSE",
+  "author": "Constructive <developers@constructive.io>",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/launchql/libpg-query-node.git"
+    "url": "git://github.com/constructive-io/libpg-query-node.git"
   },
   "devDependencies": {
     "@launchql/proto-cli": "1.25.0",
