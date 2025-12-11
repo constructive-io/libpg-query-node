@@ -1,6 +1,6 @@
 {
   "name": "@libpg-query/v15",
-  "version": "15.6.2",
+  "version": "15.6.3",
   "description": "The real PostgreSQL query parser",
   "homepage": "https://github.com/constructive-io/libpg-query-node",
   "main": "./wasm/index.cjs",
