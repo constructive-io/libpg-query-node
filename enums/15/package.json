@@ -1,6 +1,6 @@
 {
   "name": "@libpg-query/enums15",
-  "version": "15.9.0",
+  "version": "15.9.1",
   "author": "Constructive <developers@constructive.io>",
   "description": "PostgreSQL AST enums from the real Postgres parser",
   "main": "index.js",
