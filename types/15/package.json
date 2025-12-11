@@ -1,6 +1,6 @@
 {
   "name": "@libpg-query/types15",
-  "version": "15.1.1",
+  "version": "15.1.2",
   "author": "Constructive <developers@constructive.io>",
   "description": "PostgreSQL AST types from the real Postgres parser",
   "main": "index.js",
