@@ -128,32 +128,32 @@ importers:
   versions/13:
     dependencies:
       '@pgsql/types':
-        specifier: ^13.11.0
-        version: 13.11.0
+        specifier: ^13.11.2
+        version: 13.11.2
 
   versions/14:
     dependencies:
       '@pgsql/types':
-        specifier: ^14.1.0
-        version: 14.1.0
+        specifier: ^14.1.2
+        version: 14.1.2
 
   versions/15:
     dependencies:
       '@pgsql/types':
-        specifier: ^15.1.0
-        version: 15.1.0
+        specifier: ^15.1.2
+        version: 15.1.2
 
   versions/16:
     dependencies:
       '@pgsql/types':
-        specifier: ^16.1.0
-        version: 16.1.0
+        specifier: ^16.1.2
+        version: 16.1.2
 
   versions/17:
     dependencies:
       '@pgsql/types':
-        specifier: ^17.6.0
-        version: 17.6.0
+        specifier: ^17.6.2
+        version: 17.6.2
 
 packages:
 
@@ -398,24 +398,28 @@ packages:
       '@types/node': 20.19.1
       long: 5.3.2
 
-  /@pgsql/types@13.11.0:
-    resolution: {integrity: sha512-+pxiFm38fPBF3zgCF7sp8/kU6afr/I8d8FvtwiTRbNetwY2rJ8ASSgdwC4e4ejkz91Pq2Mwyrd+j8AfabYRFeg==}
+  /@pgsql/types@13.11.2:
+    resolution: {integrity: sha512-ZZ5K2qJCMhpmkCsxJajDe9qYx8lvz1NTPIcfFb/L4XOdHwew1K0+9NgpKJzwoadO4tF/IduqOxoA4a9jAjG95A==}
     dev: false
 
-  /@pgsql/types@14.1.0:
-    resolution: {integrity: sha512-TiKzDVkTFxT5Twd604RH/6wmiBdIMyDXRlsZPevdtDpWXowPFm6GEv2TALB0QWq6Xa2GLtBtOCDtdMC2XANmyA==}
+  /@pgsql/types@14.1.2:
+    resolution: {integrity: sha512-BL6ylPo3DaFsTdN/cudoSpS8hsUOoAtIMNItJHrUkURCjJtnWLylKG3F34ZhH3SWUYr7Xt0KQrgxpZjzePGkUA==}
     dev: false
 
-  /@pgsql/types@15.1.0:
-    resolution: {integrity: sha512-r2qxkInQSev6JyaIwtXVh2dQQ5C5yMR+oIv8ZE2qHRvBqku6eIqcPxldAjAXod2gQ42QGaiXF0rLw/Ijf8Cv5A==}
+  /@pgsql/types@15.1.2:
+    resolution: {integrity: sha512-53cGyW69nlKYQuEeP1B14iG9MJyYta3E3+wWfdHj5GKdfHWVJKh0pXOIvLRjPOcZrYaJ3GT5hdlX2V6nxb4XIQ==}
     dev: false
 
-  /@pgsql/types@16.1.0:
-    resolution: {integrity: sha512-ZsHVTfhxkhHKZYVH3qy24u5HsYYTYgC+d+80Iul+P1lpKAoS4yToMgrWKznhcqiK6iBeHNf8AcdQJXyLolce5g==}
+  /@pgsql/types@16.1.2:
+    resolution: {integrity: sha512-mrZjHMCUEm3x6dEPImmTG8cKYEpdXEh2eUvJuXCX3GuRvrINnFvzUaeL2u2FRTPUpxwUEjUEhg2dooC650FeNQ==}
     dev: false
 
   /@pgsql/types@17.6.0:
     resolution: {integrity: sha512-WGVIne1kFm3pIHiCkUWGbv7vlhxCRT+61UigsYejhmEsl4Iyf8d2CBnt9muhi571mfuwvtkeD0sxo5y8oj0ijQ==}
+    dev: false
+
+  /@pgsql/types@17.6.2:
+    resolution: {integrity: sha512-1UtbELdbqNdyOShhrVfSz3a1gDi0s9XXiQemx+6QqtsrXe62a6zOGU+vjb2GRfG5jeEokI1zBBcfD42enRv0Rw==}
     dev: false
 
   /@pkgjs/parseargs@0.11.0:
