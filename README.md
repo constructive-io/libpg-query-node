@@ -125,12 +125,15 @@ This package uses a **WASM-only build system** for true cross-platform compatibi
 
 ### Building WASM Artifacts
 
+Run these commands from inside a `versions/*` directory (e.g., `versions/17`):
+
 1. **Install dependencies:**
    ```bash
    pnpm install
    ```
 
 2. **Build WASM artifacts:**
+   
    ```bash
    pnpm run build
    ```
