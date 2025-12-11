@@ -38,7 +38,7 @@
   },
   "devDependencies": {},
   "dependencies": {
-    "@pgsql/types": "^13.11.0"
+    "@pgsql/types": "^13.11.2"
   },
   "keywords": [
     "sql",
