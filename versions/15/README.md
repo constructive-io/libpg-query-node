@@ -21,7 +21,7 @@
 
 This is the official PostgreSQL parser, compiled to WebAssembly (WASM) for seamless, cross-platform compatibility. Use it in Node.js or the browser, on Linux, Windows, or anywhere JavaScript runs.
 
-Built to power [pgsql-parser](https://github.com/pyramation/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
+Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
 
 ### Features
 

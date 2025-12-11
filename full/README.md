@@ -21,7 +21,7 @@
 
 This is the official PostgreSQL parser, compiled to WebAssembly (WASM) for seamless, cross-platform compatibility. Use it in Node.js or the browser, on Linux, Windows, or anywhere JavaScript runs.
 
-Built to power [pgsql-parser](https://github.com/pyramation/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
+Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
 
 ### Features
 
@@ -337,7 +337,7 @@ Our latest is built with `17-latest` branch from libpg_query
 | 13                       | 13-latest   | [`13-latest`](https://github.com/constructive-io/libpg-query-node/tree/13-latest)                       | [`libpg-query@13.3.1`](https://www.npmjs.com/package/libpg-query/v/13.3.1)
 | 12                       | (n/a)       |                                                                                                |
 | 11                       | (n/a)       |                                                                                                |
-| 10                       | 10-latest   |                        | `@1.3.1` ([tree](https://github.com/pyramation/pgsql-parser/tree/39b7b1adc8914253226e286a48105785219a81ca))      |
+| 10                       | 10-latest   |                        | `@1.3.1` ([tree](https://github.com/constructive-io/pgsql-parser/tree/39b7b1adc8914253226e286a48105785219a81ca))      |
 
 
 ## Troubleshooting
