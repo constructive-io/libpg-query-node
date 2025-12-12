@@ -5,7 +5,7 @@
  * npm run copy:templates
  */
 
-export * from "@pgsql/types";
+export * from "@pgsql/types/index.js";
 
 // @ts-ignore
 import PgQueryModule from './libpg-query.js';
