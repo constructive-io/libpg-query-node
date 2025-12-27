@@ -1,7 +1,7 @@
 # @libpg-query/parser
 
 <p align="center" width="100%">
-    <img src="https://github.com/constructive-io/libpg-query-node/assets/545047/5fd420cc-cdc6-4211-9b0f-0eca8321ba72" alt="constructive.io" width="100">
+    <img height="250" src="https://raw.githubusercontent.com/constructive-io/constructive/refs/heads/main/assets/outline-logo.svg" alt="constructive.io">
 </p>
 
 <p align="center" width="100%">

@@ -1,7 +1,7 @@
 # libpg-query
 
 <p align="center" width="100%">
-    <img src="https://github.com/constructive-io/libpg-query-node/assets/545047/5fd420cc-cdc6-4211-9b0f-0eca8321ba72" alt="constructive.io" width="100">
+    <img height="250" src="https://raw.githubusercontent.com/constructive-io/constructive/refs/heads/main/assets/outline-logo.svg" alt="constructive.io">
 </p>
 
 <p align="center" width="100%">
@@ -17,7 +17,7 @@
 
 # The Real PostgreSQL Parser for JavaScript
 
-### Bring the power of PostgreSQL's native parser to your JavaScript projects — no native builds, no platform headaches.
+### Bring the power of PostgreSQL's native parser to your TypeScript projects — no native builds, no platform headaches.
 
 This is the official PostgreSQL parser, compiled to WebAssembly (WASM) for seamless, cross-platform compatibility. Use it in Node.js or the browser, on Linux, Windows, or anywhere JavaScript runs.
 
