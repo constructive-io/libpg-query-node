@@ -9,7 +9,7 @@ function getVersionMappings() {
   const versionsDir = path.join(__dirname, '..', 'versions');
   const mappings = [];
   
-  for (const version of ['13', '14', '15', '16', '17']) {
+  for (const version of ['13', '14', '15', '16', '17', '18']) {
     const packagePath = path.join(versionsDir, version, 'package.json');
     if (fs.existsSync(packagePath)) {
       const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
@@ -70,7 +70,9 @@ async function fetchProtos() {
     }
     
     // Use the libpgQueryTag from the Makefile
-    const url = `https://raw.githubusercontent.com/pganalyze/libpg_query/refs/tags/${libpgQueryTag}/protobuf/pg_query.proto`;
+    // For dev branches (containing 'dev'), use refs/heads/, otherwise use refs/tags/
+    const refType = libpgQueryTag.includes('dev') ? 'heads' : 'tags';
+    const url = `https://raw.githubusercontent.com/pganalyze/libpg_query/refs/${refType}/${libpgQueryTag}/protobuf/pg_query.proto`;
     const destPath = path.join(versionDir, 'pg_query.proto');
     
     console.log(`Fetching protobuf for PostgreSQL ${pgVersion} with tag ${libpgQueryTag}...`);
