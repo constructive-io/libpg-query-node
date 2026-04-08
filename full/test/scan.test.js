@@ -227,47 +227,53 @@ describe("Query Scanning", () => {
     });
 
     it("should handle multi-line dollar-quoted strings without JSON errors", () => {
-      // This tests that the JSON serialization properly escapes control
-      // characters (newlines, tabs) inside token text fields.
-      // Without a fix, scanSync throws: "Bad control character in string literal"
+      // Without the fix, scanSync throws:
+      //   "Bad control character in string literal"
+      // because build_scan_json() doesn't escape \n in the token text.
       const sql = `CREATE FUNCTION test() RETURNS void AS $$
 BEGIN
   RAISE NOTICE 'hello';
 END;
 $$ LANGUAGE plpgsql`;
-      
+
       const result = query.scanSync(sql);
       assert.equal(typeof result, "object");
       assert.ok(Array.isArray(result.tokens));
       assert.ok(result.tokens.length > 0);
-      
-      // Find the dollar-quoted string token
+
+      // The dollar-quoted body spans multiple lines
       const dollarToken = result.tokens.find(t => t.text.includes('BEGIN'));
       assert.ok(dollarToken, "should have a token containing the function body");
-      assert.ok(dollarToken.text.includes('\n'), "token text should contain newlines");
+      assert.ok(dollarToken.text.includes('\n'), "token text should preserve newlines");
     });
 
-    it("should handle multi-line tokens with tabs", () => {
-      const sql = "SELECT $$line1\n\tindented\nline3$$";
-      
+    it("should handle dollar-quoted tokens with tabs", () => {
+      // Tab characters also break JSON.parse when unescaped.
+      const sql = `SELECT $$line1
+	indented
+line3$$`;
+
       const result = query.scanSync(sql);
       assert.equal(typeof result, "object");
       assert.ok(Array.isArray(result.tokens));
-      
+
       const dollarToken = result.tokens.find(t => t.text.includes('indented'));
       assert.ok(dollarToken, "should have a token containing the tabbed content");
     });
 
-    it("should handle multi-line SQL comments", () => {
-      const sql = "SELECT 1; /* multi\nline\ncomment */ SELECT 2";
-      
+    it("should handle multi-line block comments", () => {
+      // C-style block comments spanning multiple lines hit the same bug.
+      const sql = `SELECT 1; /* multi
+line
+comment */ SELECT 2`;
+
       const result = query.scanSync(sql);
       assert.equal(typeof result, "object");
       assert.ok(Array.isArray(result.tokens));
-      
+
       const commentToken = result.tokens.find(t => t.tokenName === "C_COMMENT");
       assert.ok(commentToken, "should have a C_COMMENT token");
-      assert.ok(commentToken.text.includes('\n'), "comment text should contain newlines");
+      assert.ok(commentToken.text.includes('\n'), "comment text should preserve newlines");
     });
   });
 });
