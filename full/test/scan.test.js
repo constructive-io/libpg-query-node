@@ -225,5 +225,49 @@ describe("Query Scanning", () => {
       assert.equal(typeof result1.version, "number");
       assert.ok(result1.version > 0);
     });
+
+    it("should handle multi-line dollar-quoted strings without JSON errors", () => {
+      // This tests that the JSON serialization properly escapes control
+      // characters (newlines, tabs) inside token text fields.
+      // Without a fix, scanSync throws: "Bad control character in string literal"
+      const sql = `CREATE FUNCTION test() RETURNS void AS $$
+BEGIN
+  RAISE NOTICE 'hello';
+END;
+$$ LANGUAGE plpgsql`;
+      
+      const result = query.scanSync(sql);
+      assert.equal(typeof result, "object");
+      assert.ok(Array.isArray(result.tokens));
+      assert.ok(result.tokens.length > 0);
+      
+      // Find the dollar-quoted string token
+      const dollarToken = result.tokens.find(t => t.text.includes('BEGIN'));
+      assert.ok(dollarToken, "should have a token containing the function body");
+      assert.ok(dollarToken.text.includes('\n'), "token text should contain newlines");
+    });
+
+    it("should handle multi-line tokens with tabs", () => {
+      const sql = "SELECT $$line1\n\tindented\nline3$$";
+      
+      const result = query.scanSync(sql);
+      assert.equal(typeof result, "object");
+      assert.ok(Array.isArray(result.tokens));
+      
+      const dollarToken = result.tokens.find(t => t.text.includes('indented'));
+      assert.ok(dollarToken, "should have a token containing the tabbed content");
+    });
+
+    it("should handle multi-line SQL comments", () => {
+      const sql = "SELECT 1; /* multi\nline\ncomment */ SELECT 2";
+      
+      const result = query.scanSync(sql);
+      assert.equal(typeof result, "object");
+      assert.ok(Array.isArray(result.tokens));
+      
+      const commentToken = result.tokens.find(t => t.tokenName === "C_COMMENT");
+      assert.ok(commentToken, "should have a C_COMMENT token");
+      assert.ok(commentToken.text.includes('\n'), "comment text should contain newlines");
+    });
   });
 });
