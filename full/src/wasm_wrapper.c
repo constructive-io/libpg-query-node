@@ -379,8 +379,19 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
             char c = token_text[j];
             if (c == '"' || c == '\\') {
                 escaped_text[escaped_pos++] = '\\';
+                escaped_text[escaped_pos++] = c;
+            } else if (c == '\n') {
+                escaped_text[escaped_pos++] = '\\';
+                escaped_text[escaped_pos++] = 'n';
+            } else if (c == '\r') {
+                escaped_text[escaped_pos++] = '\\';
+                escaped_text[escaped_pos++] = 'r';
+            } else if (c == '\t') {
+                escaped_text[escaped_pos++] = '\\';
+                escaped_text[escaped_pos++] = 't';
+            } else {
+                escaped_text[escaped_pos++] = c;
             }
-            escaped_text[escaped_pos++] = c;
         }
         escaped_text[escaped_pos] = '\0';
         
