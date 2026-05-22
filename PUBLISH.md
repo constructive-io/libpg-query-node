@@ -80,7 +80,7 @@ This command will:
 
 ```bash
 # Set the version (e.g. 17, 16, 15, etc.)
-VERSION=17
+VERSION=18
 
 cd types/${VERSION}
 pnpm version patch
@@ -94,7 +94,7 @@ Promote to latest (optional)
 
 ```bash
 # Set the version (e.g. 17, 16, 15, etc.)
-VERSION=17
+VERSION=18
 
 # Promote pg${VERSION} tag to latest
 npm dist-tag add @pgsql/types@pg${VERSION} latest
@@ -109,7 +109,7 @@ npm dist-tag add @pgsql/types@pg${VERSION} latest
 
 ```bash
 # Set the version (e.g. 17, 16, 15, etc.)
-VERSION=17
+VERSION=18
 
 cd enums/${VERSION}
 pnpm version patch
@@ -123,7 +123,7 @@ Promote to latest (optional)
 
 ```bash
 # Set the version (e.g. 17, 16, 15, etc.)
-VERSION=17
+VERSION=18
 
 # Promote pg${VERSION} tag to latest
 npm dist-tag add @pgsql/enums@pg${VERSION} latest
@@ -139,7 +139,7 @@ npm dist-tag add @pgsql/enums@pg${VERSION} latest
 ### Quick Publish
 ```bash
 # Set the version (e.g. 17, 16, 15, etc.)
-VERSION=17
+VERSION=18
 
 # Build and publish a specific version
 cd versions/${VERSION}
