@@ -10,7 +10,7 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
-const VERSIONS = ['17', '16', '15', '14', '13'];
+const VERSIONS = ['18', '17', '16', '15', '14', '13'];
 
 function checkGitStatus() {
   try {
