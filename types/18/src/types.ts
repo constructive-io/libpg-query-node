@@ -3,7 +3,7 @@
 * DO NOT MODIFY IT BY HAND. Instead, modify the source proto file,
 * and run the pg-proto-parser generate command to regenerate this file.
 */
-import { QuerySource, SortByDir, SortByNulls, SetQuantifier, A_Expr_Kind, RoleSpecType, TableLikeOption, DefElemAction, PartitionStrategy, PartitionRangeDatumKind, RTEKind, WCOKind, GroupingSetKind, CTEMaterialize, JsonQuotes, JsonTableColumnType, SetOperation, ObjectType, DropBehavior, AlterTableType, GrantTargetType, VariableSetKind, ConstrType, ImportForeignSchemaType, RoleStmtType, FetchDirection, FunctionParameterMode, TransactionStmtKind, ViewCheckOption, DiscardMode, ReindexObjectType, AlterTSConfigType, PublicationObjSpecType, AlterPublicationAction, AlterSubscriptionType, OverridingKind, OnCommitAction, TableFuncType, ParamKind, CoercionContext, CoercionForm, BoolExprType, SubLinkType, RowCompareType, MinMaxOp, SQLValueFunctionOp, XmlExprOp, XmlOptionType, JsonEncoding, JsonFormatType, JsonConstructorType, JsonValueType, JsonWrapper, JsonBehaviorType, JsonExprOp, NullTestType, BoolTestType, MergeMatchKind, CmdType, JoinType, AggStrategy, AggSplit, SetOpCmd, SetOpStrategy, OnConflictAction, LimitOption, LockClauseStrength, LockWaitPolicy, LockTupleMode, KeywordKind, Token } from "./enums";
+import { QuerySource, SortByDir, SortByNulls, SetQuantifier, A_Expr_Kind, RoleSpecType, TableLikeOption, DefElemAction, PartitionStrategy, PartitionRangeDatumKind, RTEKind, WCOKind, GroupingSetKind, CTEMaterialize, ReturningOptionKind, JsonQuotes, JsonTableColumnType, SetOperation, ObjectType, DropBehavior, AlterTableType, GrantTargetType, VariableSetKind, ConstrType, ImportForeignSchemaType, RoleStmtType, FetchDirection, FunctionParameterMode, TransactionStmtKind, ViewCheckOption, DiscardMode, ReindexObjectType, AlterTSConfigType, PublicationObjSpecType, AlterPublicationAction, AlterSubscriptionType, OverridingKind, OnCommitAction, TableFuncType, VarReturningType, ParamKind, CoercionContext, CoercionForm, BoolExprType, SubLinkType, MinMaxOp, SQLValueFunctionOp, XmlExprOp, XmlOptionType, JsonEncoding, JsonFormatType, JsonConstructorType, JsonValueType, JsonWrapper, JsonBehaviorType, JsonExprOp, NullTestType, BoolTestType, MergeMatchKind, CmdType, JoinType, AggStrategy, AggSplit, SetOpCmd, SetOpStrategy, OnConflictAction, LimitOption, LockClauseStrength, LockWaitPolicy, LockTupleMode, CompareType, KeywordKind, Token, Context } from "./enums";
 export type Node = {
   ParseResult: ParseResult;
 } | {
@@ -143,6 +143,8 @@ export type Node = {
 } | {
   InferenceElem: InferenceElem;
 } | {
+  ReturningExpr: ReturningExpr;
+} | {
   TargetEntry: TargetEntry;
 } | {
   RangeTblRef: RangeTblRef;
@@ -217,8 +219,6 @@ export type Node = {
 } | {
   PartitionRangeDatum: PartitionRangeDatum;
 } | {
-  SinglePartitionSpec: SinglePartitionSpec;
-} | {
   PartitionCmd: PartitionCmd;
 } | {
   RangeTblEntry: RangeTblEntry;
@@ -252,6 +252,10 @@ export type Node = {
   CommonTableExpr: CommonTableExpr;
 } | {
   MergeWhenClause: MergeWhenClause;
+} | {
+  ReturningOption: ReturningOption;
+} | {
+  ReturningClause: ReturningClause;
 } | {
   TriggerTransition: TriggerTransition;
 } | {
@@ -309,9 +313,11 @@ export type Node = {
 } | {
   AlterTableStmt: AlterTableStmt;
 } | {
-  ReplicaIdentityStmt: ReplicaIdentityStmt;
-} | {
   AlterTableCmd: AlterTableCmd;
+} | {
+  ATAlterConstraint: ATAlterConstraint;
+} | {
+  ReplicaIdentityStmt: ReplicaIdentityStmt;
 } | {
   AlterCollationStmt: AlterCollationStmt;
 } | {
@@ -546,6 +552,14 @@ export type Node = {
   DropSubscriptionStmt: DropSubscriptionStmt;
 } | {
   ScanToken: ScanToken;
+} | {
+  SummaryResult: SummaryResult;
+} | {
+  Table: Table;
+} | {
+  Function: Function;
+} | {
+  FilterColumn: FilterColumn;
 };
 export interface ParseResult {
   version?: number;
@@ -627,7 +641,7 @@ export interface IntoClause {
   options?: Node[];
   onCommit?: OnCommitAction;
   tableSpaceName?: string;
-  viewQuery?: Node;
+  viewQuery?: Query;
   skipData?: boolean;
 }
 export interface Var {
@@ -639,6 +653,7 @@ export interface Var {
   varcollid?: number;
   varnullingrels?: bigint[];
   varlevelsup?: number;
+  varreturningtype?: VarReturningType;
   location?: number;
 }
 export interface Param {
@@ -895,6 +910,8 @@ export interface ArrayExpr {
   element_typeid?: number;
   elements?: Node[];
   multidims?: boolean;
+  list_start?: number;
+  list_end?: number;
   location?: number;
 }
 export interface RowExpr {
@@ -907,7 +924,7 @@ export interface RowExpr {
 }
 export interface RowCompareExpr {
   xpr?: Node;
-  rctype?: RowCompareType;
+  cmptype?: CompareType;
   opnos?: Node[];
   opfamilies?: Node[];
   inputcollids?: Node[];
@@ -1085,6 +1102,12 @@ export interface InferenceElem {
   infercollid?: number;
   inferopclass?: number;
 }
+export interface ReturningExpr {
+  xpr?: Node;
+  retlevelsup?: number;
+  retold?: boolean;
+  retexpr?: Node;
+}
 export interface TargetEntry {
   xpr?: Node;
   expr?: Node;
@@ -1138,6 +1161,7 @@ export interface Query {
   hasModifyingCTE?: boolean;
   hasForUpdate?: boolean;
   hasRowSecurity?: boolean;
+  hasGroupRTE?: boolean;
   isReturn?: boolean;
   cteList?: Node[];
   rtable?: Node[];
@@ -1149,6 +1173,8 @@ export interface Query {
   targetList?: Node[];
   override?: OverridingKind;
   onConflict?: OnConflictExpr;
+  returningOldAlias?: string;
+  returningNewAlias?: string;
   returningList?: Node[];
   groupClause?: Node[];
   groupDistinct?: boolean;
@@ -1190,6 +1216,8 @@ export interface A_Expr {
   name?: Node[];
   lexpr?: Node;
   rexpr?: Node;
+  rexpr_list_start?: number;
+  rexpr_list_end?: number;
   location?: number;
 }
 export interface TypeCast {
@@ -1232,6 +1260,8 @@ export interface A_Indirection {
 }
 export interface A_ArrayExpr {
   elements?: Node[];
+  list_start?: number;
+  list_end?: number;
   location?: number;
 }
 export interface ResTarget {
@@ -1382,7 +1412,6 @@ export interface PartitionRangeDatum {
   value?: Node;
   location?: number;
 }
-export interface SinglePartitionSpec {}
 export interface PartitionCmd {
   name?: RangeVar;
   bound?: PartitionBoundSpec;
@@ -1418,6 +1447,7 @@ export interface RangeTblEntry {
   colcollations?: Node[];
   enrname?: string;
   enrtuples?: number;
+  groupexprs?: Node[];
   lateral?: boolean;
   inFromCl?: boolean;
   securityQuals?: Node[];
@@ -1456,6 +1486,7 @@ export interface SortGroupClause {
   tleSortGroupRef?: number;
   eqop?: number;
   sortop?: number;
+  reverse_sort?: boolean;
   nulls_first?: boolean;
   hashable?: boolean;
 }
@@ -1544,6 +1575,15 @@ export interface MergeWhenClause {
   condition?: Node;
   targetList?: Node[];
   values?: Node[];
+}
+export interface ReturningOption {
+  option?: ReturningOptionKind;
+  value?: string;
+  location?: number;
+}
+export interface ReturningClause {
+  options?: Node[];
+  exprs?: Node[];
 }
 export interface TriggerTransition {
   name?: string;
@@ -1668,7 +1708,7 @@ export interface InsertStmt {
   cols?: Node[];
   selectStmt?: Node;
   onConflictClause?: OnConflictClause;
-  returningList?: Node[];
+  returningClause?: ReturningClause;
   withClause?: WithClause;
   override?: OverridingKind;
 }
@@ -1676,7 +1716,7 @@ export interface DeleteStmt {
   relation?: RangeVar;
   usingClause?: Node[];
   whereClause?: Node;
-  returningList?: Node[];
+  returningClause?: ReturningClause;
   withClause?: WithClause;
 }
 export interface UpdateStmt {
@@ -1684,7 +1724,7 @@ export interface UpdateStmt {
   targetList?: Node[];
   whereClause?: Node;
   fromClause?: Node[];
-  returningList?: Node[];
+  returningClause?: ReturningClause;
   withClause?: WithClause;
 }
 export interface MergeStmt {
@@ -1692,7 +1732,7 @@ export interface MergeStmt {
   sourceRelation?: Node;
   joinCondition?: Node;
   mergeWhenClauses?: Node[];
-  returningList?: Node[];
+  returningClause?: ReturningClause;
   withClause?: WithClause;
 }
 export interface SelectStmt {
@@ -1749,10 +1789,6 @@ export interface AlterTableStmt {
   objtype?: ObjectType;
   missing_ok?: boolean;
 }
-export interface ReplicaIdentityStmt {
-  identity_type?: string;
-  name?: string;
-}
 export interface AlterTableCmd {
   subtype?: AlterTableType;
   name?: string;
@@ -1762,6 +1798,20 @@ export interface AlterTableCmd {
   behavior?: DropBehavior;
   missing_ok?: boolean;
   recurse?: boolean;
+}
+export interface ATAlterConstraint {
+  conname?: string;
+  alterEnforceability?: boolean;
+  is_enforced?: boolean;
+  alterDeferrability?: boolean;
+  deferrable?: boolean;
+  initdeferred?: boolean;
+  alterInheritability?: boolean;
+  noinherit?: boolean;
+}
+export interface ReplicaIdentityStmt {
+  identity_type?: string;
+  name?: string;
 }
 export interface AlterCollationStmt {
   collname?: Node[];
@@ -1821,7 +1871,9 @@ export interface VariableSetStmt {
   kind?: VariableSetKind;
   name?: string;
   args?: Node[];
+  jumble_args?: boolean;
   is_local?: boolean;
+  location?: number;
 }
 export interface VariableShowStmt {
   name?: string;
@@ -1834,6 +1886,7 @@ export interface CreateStmt {
   partspec?: PartitionSpec;
   ofTypename?: TypeName;
   constraints?: Node[];
+  nnconstraints?: Node[];
   options?: Node[];
   oncommit?: OnCommitAction;
   tablespacename?: string;
@@ -1845,15 +1898,17 @@ export interface Constraint {
   conname?: string;
   deferrable?: boolean;
   initdeferred?: boolean;
+  is_enforced?: boolean;
   skip_validation?: boolean;
   initially_valid?: boolean;
   is_no_inherit?: boolean;
   raw_expr?: Node;
   cooked_expr?: string;
   generated_when?: string;
-  inhcount?: number;
+  generated_kind?: string;
   nulls_not_distinct?: boolean;
   keys?: Node[];
+  without_overlaps?: boolean;
   including?: Node[];
   exclusions?: Node[];
   options?: Node[];
@@ -1865,6 +1920,8 @@ export interface Constraint {
   pktable?: RangeVar;
   fk_attrs?: Node[];
   pk_attrs?: Node[];
+  fk_with_period?: boolean;
+  pk_with_period?: boolean;
   fk_matchtype?: string;
   fk_upd_action?: string;
   fk_del_action?: string;
@@ -2148,6 +2205,7 @@ export interface IndexStmt {
   nulls_not_distinct?: boolean;
   primary?: boolean;
   isconstraint?: boolean;
+  iswithoutoverlaps?: boolean;
   deferrable?: boolean;
   initdeferred?: boolean;
   transformed?: boolean;
@@ -2187,6 +2245,7 @@ export interface FunctionParameter {
   argType?: TypeName;
   mode?: FunctionParameterMode;
   defexpr?: Node;
+  location?: number;
 }
 export interface AlterFunctionStmt {
   objtype?: ObjectType;
@@ -2482,4 +2541,30 @@ export interface ScanToken {
   end?: number;
   token?: Token;
   keywordKind?: KeywordKind;
+}
+export interface SummaryResult {
+  tables?: Table[];
+  aliases?: string;
+  cteNames?: string[];
+  functions?: Function[];
+  filterColumns?: FilterColumn[];
+  statementTypes?: string[];
+  truncatedQuery?: string;
+}
+export interface Table {
+  name?: string;
+  schemaName?: string;
+  tableName?: string;
+  context?: Context;
+}
+export interface Function {
+  name?: string;
+  functionName?: string;
+  schemaName?: string;
+  context?: Context;
+}
+export interface FilterColumn {
+  schemaName?: string;
+  tableName?: string;
+  column?: string;
 }
