@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "sourceMap": false,
+    "declaration": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "outDir": "cjs/",
+    "rootDir": "src"
+  },
+  "exclude": ["cjs", "esm", "wasm", "node_modules", "**/*.test.ts"]
+}

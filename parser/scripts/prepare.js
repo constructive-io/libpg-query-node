@@ -5,11 +5,11 @@ const path = require('path');
 // Build configurations for different tags
 const BUILD_CONFIGS = {
   'full': {
-    versions: ['13', '14', '15', '16', '17'],
-    description: 'Full build with all PostgreSQL versions (13-17)'
+    versions: ['13', '14', '15', '16', '17', '18'],
+    description: 'Full build with all PostgreSQL versions (13-18)'
   },
   'lts': {
-    versions: ['15', '16', '17'],  
+    versions: ['15', '16', '17', '18'],  
     description: 'LTS (Long Term Support)'
   }
 };

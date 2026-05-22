@@ -19,6 +19,7 @@ jobs:
           - { name: 'v15', path: 'versions/15', version: '15' }
           - { name: 'v16', path: 'versions/16', version: '16' }
           - { name: 'v17', path: 'versions/17', version: '17' }
+          - { name: 'v18', path: 'versions/18', version: '18' }
       fail-fast: false
     steps:
       - name: Checkout Repository 📥
@@ -83,6 +84,7 @@ jobs:
           - { name: 'v15', path: 'versions/15', version: '15' }
           - { name: 'v16', path: 'versions/16', version: '16' }
           - { name: 'v17', path: 'versions/17', version: '17' }
+          - { name: 'v18', path: 'versions/18', version: '18' }
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -193,9 +195,15 @@ jobs:
           name: wasm-artifacts-v17
           path: versions/17/wasm/
 
+      - name: Download v18 WASM Artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts-v18
+          path: versions/18/wasm/
+
       - name: Build Types Packages 🏗
         run: |
-          for version in 13 14 15 16 17; do
+          for version in 13 14 15 16 17 18; do
             echo "Building types for v${version}..."
             cd types/${version}
             pnpm run build
@@ -284,6 +292,12 @@ jobs:
         with:
           name: wasm-artifacts-v17
           path: versions/17/wasm/
+
+      - name: Download v18 WASM Artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts-v18
+          path: versions/18/wasm/
 
       - name: Download Parser Artifacts 📥
         uses: actions/download-artifact@v4

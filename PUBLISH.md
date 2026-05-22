@@ -45,14 +45,14 @@ This interactive script will:
 
 The parser package supports multiple build configurations:
 
-#### Full Build (all versions 13-17)
+#### Full Build (all versions 13-18)
 ```bash
 pnpm run publish:parser
 # or with specific build type
 PARSER_BUILD_TYPE=full pnpm run publish:parser
 ```
 
-#### LTS Build (versions 16-17)
+#### LTS Build (versions 15-18)
 ```bash
 PARSER_BUILD_TYPE=lts pnpm run publish:parser
 ```

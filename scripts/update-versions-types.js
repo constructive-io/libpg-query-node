@@ -19,7 +19,7 @@ try {
 
 // Extract versions for PostgreSQL 13-17
 const typeVersions = {};
-for (let pgVersion = 13; pgVersion <= 17; pgVersion++) {
+for (let pgVersion = 13; pgVersion <= 18; pgVersion++) {
   const tag = `pg${pgVersion}`;
   if (distTags[tag]) {
     typeVersions[pgVersion.toString()] = distTags[tag];

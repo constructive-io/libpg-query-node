@@ -17,13 +17,13 @@
 
 # The Real PostgreSQL Parser for JavaScript
 
-### Bring the power of PostgreSQL's native parser to your TypeScript projects — no native builds, no platform headaches.
+### Bring the power of PostgreSQL’s native parser to your JavaScript projects — no native builds, no platform headaches.
 
 This is the official PostgreSQL parser, compiled to WebAssembly (WASM) for seamless, cross-platform compatibility. Use it in Node.js or the browser, on Linux, Windows, or anywhere JavaScript runs.
 
 Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
 
-## Features
+### Features
 
 * 🔧 **Powered by PostgreSQL** – Uses the official Postgres C parser compiled to WebAssembly
 * 🖥️ **Cross-Platform** – Runs smoothly on macOS, Linux, and Windows
@@ -36,19 +36,6 @@ Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), 
 
 > 🎯 **Want to parse + deparse (full round trip)?**  
 > We highly recommend using [`pgsql-parser`](https://github.com/constructive-io/pgsql-parser) which leverages a pure TypeScript deparser that has been battle-tested against 23,000+ SQL statements and is built on top of libpg-query.
-
-### 🔀 Multi-Version Support with @pgsql/parser
-
-> **Need to support multiple PostgreSQL versions at runtime?**  
-> Use [`@pgsql/parser`](https://github.com/constructive-io/libpg-query-node/tree/main/parser) for dynamic version selection — parse SQL with PostgreSQL 15, 16, 17, or 18 in a single package!
-> 
-> ```typescript
-> import { parse } from '@pgsql/parser';
-> 
-> // Parse with specific PostgreSQL version
-> const result15 = await parse('SELECT * FROM users', 15);
-> const result18 = await parse('SELECT * FROM users', 18);
-> ```
 
 ## Installation
 
@@ -65,55 +52,106 @@ const result = await parse('SELECT * FROM users WHERE active = true');
 // {"version":180004,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget" ... "op":"SETOP_NONE"}}}]}
 ```
 
-## 📦 Packages
+## Versions
 
-This repository contains multiple packages to support different PostgreSQL versions and use cases:
+Our latest is built with the `18.0.0` tag from libpg_query
 
-### Available Packages & Versions
+| PG Major Version | libpg_query | npm dist-tag 
+|--------------------------|-------------|---------|
+| 18                       | 18.0.0      | [`pg18`](https://www.npmjs.com/package/libpg-query/v/pg18)
+| 17                       | 17-6.1.0    | [`pg17`](https://www.npmjs.com/package/libpg-query/v/latest)
+| 16                       | 16-5.2.0    | [`pg16`](https://www.npmjs.com/package/libpg-query/v/pg16)
+| 15                       | 15-4.2.4    | [`pg15`](https://www.npmjs.com/package/libpg-query/v/pg15)
+| 14                       | 14-3.0.0    | [`pg14`](https://www.npmjs.com/package/libpg-query/v/pg14)
+| 13                       | 13-2.2.0    | [`pg13`](https://www.npmjs.com/package/libpg-query/v/pg13)
 
-| Package | Description | PostgreSQL Versions | npm Package |
-|---------|-------------|---------------------|-------------|
-| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | Lightweight parser (parse only) | 13, 14, 15, 16, 17, 18 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
-| **[@pgsql/parser](https://github.com/constructive-io/libpg-query-node/tree/main/parser)** | Multi-version parser (runtime selection) | 15, 16, 17, 18 | [`@pgsql/parser`](https://www.npmjs.com/package/@pgsql/parser) |
-| **[@pgsql/types](https://github.com/constructive-io/libpg-query-node/tree/main/types)** | TypeScript type definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/types`](https://www.npmjs.com/package/@pgsql/types) |
-| **[@pgsql/enums](https://github.com/constructive-io/libpg-query-node/tree/main/enums)** | TypeScript enum definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/enums`](https://www.npmjs.com/package/@pgsql/enums) |
-| **[@libpg-query/parser](https://github.com/constructive-io/libpg-query-node/tree/main/full)** | Full parser with all features | 17 only | [`@libpg-query/parser`](https://www.npmjs.com/package/@libpg-query/parser) |
+## Usage
 
-### Version Tags
+### `parse(query: string): Promise<ParseResult>`
 
-Each versioned package uses npm dist-tags for PostgreSQL version selection:
+Parses the SQL and returns a Promise for the parse tree. May reject with a parse error.
 
-```bash
-# Install specific PostgreSQL version
-npm install libpg-query@pg18      # PostgreSQL 18 (latest)
-npm install libpg-query@pg17      # PostgreSQL 17
-npm install libpg-query@pg16      # PostgreSQL 16
-npm install @pgsql/types@pg18     # Types for PostgreSQL 18
-npm install @pgsql/enums@pg15     # Enums for PostgreSQL 15
+```typescript
+import { parse } from 'libpg-query';
 
-# Install latest (defaults to pg18)
-npm install libpg-query
-npm install @pgsql/types
-npm install @pgsql/enums
+const result = await parse('SELECT * FROM users WHERE active = true');
+// Returns: ParseResult - parsed query object
 ```
 
-### Which Package Should I Use?
+### `parseSync(query: string): ParseResult`
 
-- **Just need to parse SQL?** → Use `libpg-query` (lightweight, all PG versions)
-- **Need multiple versions at runtime?** → Use `@pgsql/parser` (dynamic version selection)
-- **Need TypeScript types?** → Add `@pgsql/types` and/or `@pgsql/enums`
-- **Need fingerprint, normalize, or deparse?** → Use `@libpg-query/parser` (PG 17 only)
+Synchronous version that returns the parse tree directly. May throw a parse error.
 
+```typescript
+import { parseSync } from 'libpg-query';
 
-## API Documentation
+const result = parseSync('SELECT * FROM users WHERE active = true');
+// Returns: ParseResult - parsed query object
+```
 
-For detailed API documentation and usage examples, see the package-specific READMEs:
+⚠ **Note:** If you need additional functionality like `fingerprint`, `scan`, `deparse`, or `normalize`, check out the full package (`@libpg-query/parser`) in the [./full](https://github.com/constructive-io/libpg-query-node/tree/main/full) folder of the repo.
 
-- **libpg-query** - [Parser API Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/versions/18)
-- **@pgsql/parser** - [Multi-Version Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/parser)
-- **@pgsql/types** - [Types Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/types/18)
-- **@pgsql/enums** - [Enums Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/enums/18)
-- **@libpg-query/parser** - [Full Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/full)
+### Initialization
+
+The library provides both async and sync methods. Async methods handle initialization automatically, while sync methods require explicit initialization.
+
+#### Async Methods (Recommended)
+
+Async methods handle initialization automatically and are always safe to use:
+
+```typescript
+import { parse } from 'libpg-query';
+
+// These handle initialization automatically
+const result = await parse('SELECT * FROM users');
+```
+
+#### Sync Methods
+
+Sync methods require explicit initialization using `loadModule()`:
+
+```typescript
+import { loadModule, parseSync } from 'libpg-query';
+
+// Initialize first
+await loadModule();
+
+// Now safe to use sync methods
+const result = parseSync('SELECT * FROM users');
+```
+
+### `loadModule(): Promise<void>`
+
+Explicitly initializes the WASM module. Required before using any sync methods.
+
+```typescript
+import { loadModule, parseSync } from 'libpg-query';
+
+// Initialize before using sync methods
+await loadModule();
+const result = parseSync('SELECT * FROM users');
+```
+
+Note: We recommend using async methods as they handle initialization automatically. Use sync methods only when necessary, and always call `loadModule()` first.
+
+### Type Definitions
+
+```typescript
+interface ParseResult {
+  version: number;
+  stmts: Statement[];
+}
+
+interface Statement {
+  stmt_type: string;
+  stmt_len: number;
+  stmt_location: number;
+  query: string;
+}
+
+```
+
+**Note:** The return value is an array, as multiple queries may be provided in a single string (semicolon-delimited, as PostgreSQL expects).
 
 ## Build Instructions
 
@@ -126,15 +164,12 @@ This package uses a **WASM-only build system** for true cross-platform compatibi
 
 ### Building WASM Artifacts
 
-Run these commands from inside a `versions/*` directory (e.g., `versions/17`):
-
 1. **Install dependencies:**
    ```bash
    pnpm install
    ```
 
 2. **Build WASM artifacts:**
-   
    ```bash
    pnpm run build
    ```
@@ -189,22 +224,6 @@ pnpm run test
 - Ensure Emscripten SDK is properly installed and configured
 - Check that all required build dependencies are available
 
-**`.wasm` not found**
-- Usually occurs in Next.js/Webpack/Turbopack
-- see **[LOADING_WASM.md](./LOADING_WASM.md)**
-
-### Template System
-
-To avoid duplication across PostgreSQL versions, common files are maintained in the `templates/` directory:
-- `LICENSE`, `Makefile`, `src/index.ts`, `src/libpg-query.d.ts`, `src/wasm_wrapper.c`
-
-To update version-specific files from templates:
-```bash
-npm run copy:templates
-```
-
-This ensures consistency while allowing version-specific customizations (e.g., patches for version 13).
-
 ### Build Artifacts
 
 The build process generates these files:
@@ -230,7 +249,7 @@ Built on the excellent work of several contributors:
 
 * [pgsql-parser](https://www.npmjs.com/package/pgsql-parser): The real PostgreSQL parser for Node.js, providing symmetric parsing and deparsing of SQL statements with actual PostgreSQL parser integration.
 * [pgsql-deparser](https://www.npmjs.com/package/pgsql-deparser): A streamlined tool designed for converting PostgreSQL ASTs back into SQL queries, focusing solely on deparser functionality to complement `pgsql-parser`.
-* [@pgsql/parser](https://www.npmjs.com/package/@pgsql/parser): Multi-version PostgreSQL parser with dynamic version selection at runtime, supporting PostgreSQL 15, 16, and 17 in a single package.
+* [@pgsql/parser](https://www.npmjs.com/package/@pgsql/parser): Multi-version PostgreSQL parser with dynamic version selection at runtime, supporting PostgreSQL 15, 16, 17, and 18 in a single package.
 * [@pgsql/types](https://www.npmjs.com/package/@pgsql/types): Offers TypeScript type definitions for PostgreSQL AST nodes, facilitating type-safe construction, analysis, and manipulation of ASTs.
 * [@pgsql/enums](https://www.npmjs.com/package/@pgsql/enums): Provides TypeScript enum definitions for PostgreSQL constants, enabling type-safe usage of PostgreSQL enums and constants in your applications.
 * [@pgsql/utils](https://www.npmjs.com/package/@pgsql/utils): A comprehensive utility library for PostgreSQL, offering type-safe AST node creation and enum value conversions, simplifying the construction and manipulation of PostgreSQL ASTs.

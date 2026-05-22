@@ -65,6 +65,13 @@ importers:
         version: 1.28.2
     publishDirectory: dist
 
+  enums/18:
+    devDependencies:
+      pg-proto-parser:
+        specifier: ^1.28.2
+        version: 1.28.2
+    publishDirectory: dist
+
   full:
     dependencies:
       '@launchql/protobufjs':
@@ -125,6 +132,13 @@ importers:
         version: 1.28.2
     publishDirectory: dist
 
+  types/18:
+    devDependencies:
+      pg-proto-parser:
+        specifier: ^1.28.2
+        version: 1.28.2
+    publishDirectory: dist
+
   versions/13:
     dependencies:
       '@pgsql/types':
@@ -150,6 +164,12 @@ importers:
         version: 16.1.2
 
   versions/17:
+    dependencies:
+      '@pgsql/types':
+        specifier: ^17.6.2
+        version: 17.6.2
+
+  versions/18:
     dependencies:
       '@pgsql/types':
         specifier: ^17.6.2
