@@ -54,7 +54,7 @@ const result = await parse('SELECT * FROM users WHERE active = true');
 
 ## Versions
 
-Our latest is built with the `18.0.0` tag from libpg_query
+Our latest is built with the `18-latest` branch from libpg_query
 
 | PG Major Version | libpg_query | npm dist-tag 
 |--------------------------|-------------|---------|
