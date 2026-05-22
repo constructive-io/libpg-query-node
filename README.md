@@ -102,7 +102,7 @@ npm install @pgsql/enums
 - **Just need to parse SQL?** → Use `libpg-query` (lightweight, all PG versions)
 - **Need multiple versions at runtime?** → Use `@pgsql/parser` (dynamic version selection)
 - **Need TypeScript types?** → Add `@pgsql/types` and/or `@pgsql/enums`
-- **Need fingerprint, normalize, or deparse?** → Use `@libpg-query/parser` (PG 17 only)
+- **Need fingerprint, normalize, scan, or PL/pgSQL parsing?** → Use `@libpg-query/parser` (PG 18)
 
 
 ## API Documentation
