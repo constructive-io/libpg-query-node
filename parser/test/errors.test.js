@@ -67,7 +67,7 @@ describe('Parser Error Handling', () => {
       assert.throws(
         () => new Parser({ version: 12 }),
         {
-          message: 'Unsupported PostgreSQL version: 12. Supported versions are 13, 14, 15, 16, 17.'
+          message: 'Unsupported PostgreSQL version: 12. Supported versions are 13, 14, 15, 16, 17, 18.'
         }
       );
     });

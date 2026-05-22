@@ -36,6 +36,11 @@
       "import": "./wasm/v17.js",
       "require": "./wasm/v17.cjs",
       "types": "./wasm/v17.d.ts"
+    },
+    "./v18": {
+      "import": "./wasm/v18.js",
+      "require": "./wasm/v18.cjs",
+      "types": "./wasm/v18.d.ts"
     }
   },
   "files": [

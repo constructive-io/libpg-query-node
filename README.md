@@ -8,7 +8,7 @@
    <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/npm/dt/libpg-query"></a>
    <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/npm/dw/libpg-query"/></a>
    <a href="https://github.com/constructive-io/libpg-query/blob/main/LICENSE-MIT"><img height="20" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>
-   <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/github/package-json/v/constructive-io/libpg-query-node?filename=versions%2F17%2Fpackage.json"/></a><br />
+   <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/github/package-json/v/constructive-io/libpg-query-node?filename=versions%2F18%2Fpackage.json"/></a><br />
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml/badge.svg" /></a>
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://img.shields.io/badge/macOS-available-333333?logo=apple&logoColor=white" /></a>
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://img.shields.io/badge/Windows-available-333333?logo=windows&logoColor=white" /></a>
@@ -40,14 +40,14 @@ Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), 
 ### 🔀 Multi-Version Support with @pgsql/parser
 
 > **Need to support multiple PostgreSQL versions at runtime?**  
-> Use [`@pgsql/parser`](https://github.com/constructive-io/libpg-query-node/tree/main/parser) for dynamic version selection — parse SQL with PostgreSQL 15, 16, or 17 in a single package!
+> Use [`@pgsql/parser`](https://github.com/constructive-io/libpg-query-node/tree/main/parser) for dynamic version selection — parse SQL with PostgreSQL 15, 16, 17, or 18 in a single package!
 > 
 > ```typescript
 > import { parse } from '@pgsql/parser';
 > 
 > // Parse with specific PostgreSQL version
 > const result15 = await parse('SELECT * FROM users', 15);
-> const result17 = await parse('SELECT * FROM users', 17);
+> const result18 = await parse('SELECT * FROM users', 18);
 > ```
 
 ## Installation
@@ -62,7 +62,7 @@ npm install libpg-query
 import { parse } from 'libpg-query';
 
 const result = await parse('SELECT * FROM users WHERE active = true');
-// {"version":170004,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget" ... "op":"SETOP_NONE"}}}]}
+// {"version":180004,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget" ... "op":"SETOP_NONE"}}}]}
 ```
 
 ## 📦 Packages
@@ -73,10 +73,10 @@ This repository contains multiple packages to support different PostgreSQL versi
 
 | Package | Description | PostgreSQL Versions | npm Package |
 |---------|-------------|---------------------|-------------|
-| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | Lightweight parser (parse only) | 13, 14, 15, 16, 17 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
-| **[@pgsql/parser](https://github.com/constructive-io/libpg-query-node/tree/main/parser)** | Multi-version parser (runtime selection) | 15, 16, 17 | [`@pgsql/parser`](https://www.npmjs.com/package/@pgsql/parser) |
-| **[@pgsql/types](https://github.com/constructive-io/libpg-query-node/tree/main/types)** | TypeScript type definitions | 13, 14, 15, 16, 17 | [`@pgsql/types`](https://www.npmjs.com/package/@pgsql/types) |
-| **[@pgsql/enums](https://github.com/constructive-io/libpg-query-node/tree/main/enums)** | TypeScript enum definitions | 13, 14, 15, 16, 17 | [`@pgsql/enums`](https://www.npmjs.com/package/@pgsql/enums) |
+| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | Lightweight parser (parse only) | 13, 14, 15, 16, 17, 18 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
+| **[@pgsql/parser](https://github.com/constructive-io/libpg-query-node/tree/main/parser)** | Multi-version parser (runtime selection) | 15, 16, 17, 18 | [`@pgsql/parser`](https://www.npmjs.com/package/@pgsql/parser) |
+| **[@pgsql/types](https://github.com/constructive-io/libpg-query-node/tree/main/types)** | TypeScript type definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/types`](https://www.npmjs.com/package/@pgsql/types) |
+| **[@pgsql/enums](https://github.com/constructive-io/libpg-query-node/tree/main/enums)** | TypeScript enum definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/enums`](https://www.npmjs.com/package/@pgsql/enums) |
 | **[@libpg-query/parser](https://github.com/constructive-io/libpg-query-node/tree/main/full)** | Full parser with all features | 17 only | [`@libpg-query/parser`](https://www.npmjs.com/package/@libpg-query/parser) |
 
 ### Version Tags
@@ -85,12 +85,13 @@ Each versioned package uses npm dist-tags for PostgreSQL version selection:
 
 ```bash
 # Install specific PostgreSQL version
-npm install libpg-query@pg17      # PostgreSQL 17 (latest)
+npm install libpg-query@pg18      # PostgreSQL 18 (latest)
+npm install libpg-query@pg17      # PostgreSQL 17
 npm install libpg-query@pg16      # PostgreSQL 16
-npm install @pgsql/types@pg17     # Types for PostgreSQL 17
+npm install @pgsql/types@pg18     # Types for PostgreSQL 18
 npm install @pgsql/enums@pg15     # Enums for PostgreSQL 15
 
-# Install latest (defaults to pg17)
+# Install latest (defaults to pg18)
 npm install libpg-query
 npm install @pgsql/types
 npm install @pgsql/enums
@@ -108,10 +109,10 @@ npm install @pgsql/enums
 
 For detailed API documentation and usage examples, see the package-specific READMEs:
 
-- **libpg-query** - [Parser API Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/versions/17)
+- **libpg-query** - [Parser API Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/versions/18)
 - **@pgsql/parser** - [Multi-Version Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/parser)
-- **@pgsql/types** - [Types Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/types/17)
-- **@pgsql/enums** - [Enums Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/enums/17)
+- **@pgsql/types** - [Types Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/types/18)
+- **@pgsql/enums** - [Enums Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/enums/18)
 - **@libpg-query/parser** - [Full Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/full)
 
 ## Build Instructions

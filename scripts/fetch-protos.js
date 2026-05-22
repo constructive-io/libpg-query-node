@@ -9,7 +9,7 @@ function getVersionMappings() {
   const versionsDir = path.join(__dirname, '..', 'versions');
   const mappings = [];
   
-  for (const version of ['13', '14', '15', '16', '17']) {
+  for (const version of ['13', '14', '15', '16', '17', '18']) {
     const packagePath = path.join(versionsDir, version, 'package.json');
     if (fs.existsSync(packagePath)) {
       const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));

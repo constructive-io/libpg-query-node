@@ -71,7 +71,7 @@ describe('Parser', () => {
 
   describe('Version-specific imports', () => {
     // Dynamically test available version imports
-    const versions = [13, 14, 15, 16, 17];
+    const versions = [13, 14, 15, 16, 17, 18];
     
     for (const version of versions) {
       it(`should parse with v${version} if available`, async () => {
@@ -92,7 +92,7 @@ describe('Parser', () => {
 
 describe('Issue Test - INSERT with multiple VALUES', () => {
   const testSQL = "INSERT INTO logtable (message) VALUES ('Init'), ('Reboot'), ('ERROR'), ('Warning'), ('info');";
-  const versions = [13, 14, 15, 16, 17];
+  const versions = [13, 14, 15, 16, 17, 18];
 
   for (const version of versions) {
     it(`should parse with PostgreSQL v${version} without throwing`, async () => {
