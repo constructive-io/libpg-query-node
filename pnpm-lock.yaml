@@ -166,8 +166,8 @@ importers:
   versions/18:
     dependencies:
       '@pgsql/types':
-        specifier: ^17.6.2
-        version: 17.6.2
+        specifier: ^18.0.0
+        version: 18.0.0
 
 packages:
 
