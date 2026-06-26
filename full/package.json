@@ -21,7 +21,7 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js",
+    "test": "node --test test/parsing.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js test/memory.test.js test/deep-nesting.test.js",
     "yamlize": "node ./scripts/yamlize.js"
   },
   "author": "Constructive <developers@constructive.io>",
