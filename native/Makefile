@@ -22,14 +22,17 @@ else
 NODE_ARCH := $(ARCH)
 endif
 
-MUSL := $(shell ldd --version 2>&1 | grep -c musl 2>/dev/null || echo 0)
-ifeq ($(MUSL),1)
+# Detect musl libc (Alpine) by the presence of its dynamic loader.
+# More reliable than parsing `ldd --version`, which varies across distros.
+ifneq ($(wildcard /lib/ld-musl-*),)
 PLATFORM_SUFFIX := -musl
 else
 PLATFORM_SUFFIX :=
 endif
 
-PLATFORM_KEY := $(PLATFORM)-$(NODE_ARCH)$(PLATFORM_SUFFIX)
+# PLATFORM_KEY can be overridden (e.g. `make build PLATFORM_KEY=linux-x64-musl`)
+# so CI can pin the output dir to the known target instead of relying on detection.
+PLATFORM_KEY ?= $(PLATFORM)-$(NODE_ARCH)$(PLATFORM_SUFFIX)
 CACHE_DIR := .cache/$(PLATFORM_KEY)
 LIBPG_QUERY_DIR := $(CACHE_DIR)/libpg_query
 

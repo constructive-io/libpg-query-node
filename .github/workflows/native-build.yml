@@ -23,7 +23,7 @@ jobs:
               platform: key,
               runner: v.runner,
               container: v.container || '',
-              musl: !!v.libc,
+              musl: (v.libc || []).includes('musl'),
             }));
             console.log(JSON.stringify(matrix));
           ")
@@ -57,7 +57,7 @@ jobs:
 
       - name: Build native addon
         working-directory: native
-        run: make build
+        run: make build PLATFORM_KEY=${{ matrix.platform }}
 
       - name: Build TypeScript
         working-directory: native

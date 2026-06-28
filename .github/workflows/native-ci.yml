@@ -35,7 +35,7 @@ jobs:
               platform: key,
               runner: v.runner,
               container: v.container || '',
-              musl: !!v.libc,
+              musl: (v.libc || []).includes('musl'),
             }));
             console.log(JSON.stringify(matrix));
           ")

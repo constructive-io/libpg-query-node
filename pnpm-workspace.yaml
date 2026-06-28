@@ -1,7 +1,6 @@
 packages:
   - 'parser'
   - 'full'
-  - 'native'
   - 'versions/18'
   - 'versions/17' 
   - 'versions/16' 
