@@ -1,0 +1,57 @@
+{
+  "name": "@ashbyhq/libpg-query-native",
+  "version": "0.1.0",
+  "description": "PostgreSQL query parser — native N-API + jemalloc backend",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build:native": "make build",
+    "build:ts": "tsc",
+    "build": "npm run build:native && npm run build:ts",
+    "clean": "make clean && rm -rf dist",
+    "test": "node --test test/parsing.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js",
+    "benchmark": "node benchmark/memory.mjs",
+    "package-platforms": "node scripts/package-platforms.mjs"
+  },
+  "keywords": [
+    "postgresql",
+    "parser",
+    "sql",
+    "native",
+    "napi",
+    "jemalloc"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ashbyhq/libpg-query-node.git",
+    "directory": "native"
+  },
+  "dependencies": {
+    "@pgsql/types": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "node-addon-api": "^8.3.1",
+    "node-api-headers": "^1.5.0",
+    "typescript": "^5.3.3"
+  },
+  "optionalDependencies": {
+    "@ashbyhq/libpg-query-native-darwin-arm64": "0.1.0",
+    "@ashbyhq/libpg-query-native-darwin-x64": "0.1.0",
+    "@ashbyhq/libpg-query-native-linux-x64": "0.1.0",
+    "@ashbyhq/libpg-query-native-linux-arm64": "0.1.0",
+    "@ashbyhq/libpg-query-native-linux-x64-musl": "0.1.0",
+    "@ashbyhq/libpg-query-native-linux-arm64-musl": "0.1.0"
+  }
+}
