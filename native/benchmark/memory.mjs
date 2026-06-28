@@ -1,16 +1,16 @@
 /**
  * Memory benchmark: compare allocator behavior for large SQL parses.
  *
- * Generates a ~2.74 MB SQL query (1500× UNION ALL of SELECT c0..c399 FROM t),
+ * Generates a ~3.3 MB SQL query (1500× UNION ALL of SELECT c0..c399 FROM t),
  * parses it, and measures RSS at idle, peak (post-parse), and after free.
  *
  * Usage:
- *   node benchmark/memory.mjs                    # native (jemalloc)
+ *   node benchmark/memory.mjs                    # native backend
  *   node benchmark/memory.mjs --wasm             # WASM backend for comparison
- *   node benchmark/memory.mjs --system-malloc    # native without jemalloc
  *   node benchmark/memory.mjs --all              # run all available backends
  *   node benchmark/memory.mjs --small            # quick sanity check (small query)
  *   node benchmark/memory.mjs --throughput       # throughput benchmark
+ *   node benchmark/memory.mjs --cycles 3         # multiple parse/free cycles
  */
 
 import { argv } from "process";
@@ -19,10 +19,6 @@ const MB = 1024 * 1024;
 
 function rss() {
   return process.memoryUsage.rss();
-}
-
-function rssMB() {
-  return (rss() / MB).toFixed(1);
 }
 
 function generateBigQuery(unions = 1500, cols = 400) {
@@ -35,41 +31,74 @@ function generateSmallQuery() {
   return "SELECT id, name, email, created_at FROM users WHERE id = $1 AND active = true";
 }
 
-async function benchmarkParse(backend, label, query) {
-  // Force GC if available
+function detectAllocator() {
+  const preload = process.env.LD_PRELOAD || process.env.DYLD_INSERT_LIBRARIES || "";
+  if (preload.includes("jemalloc")) return "jemalloc";
+  if (preload.includes("mimalloc")) return "mimalloc";
+  if (preload.includes("tcmalloc")) return "tcmalloc";
+  return "system";
+}
+
+async function gcAndSettle(ms = 200) {
   if (global.gc) global.gc();
-  await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, ms));
+  if (global.gc) global.gc();
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function benchmarkParse(backend, label, query, cycles = 1) {
+  await gcAndSettle();
 
   const idleRss = rss();
   console.log(`\n--- ${label} ---`);
   console.log(`Query size:    ${(query.length / MB).toFixed(2)} MB`);
   console.log(`Idle RSS:      ${(idleRss / MB).toFixed(1)} MB`);
 
-  const start = performance.now();
-  let result;
-  try {
-    result = await backend.parse(query);
-  } catch (e) {
-    console.log(`Parse failed:  ${e.message}`);
-    return null;
+  let peakRss = 0;
+  let totalParseTime = 0;
+  let resultSize = 0;
+
+  for (let cycle = 0; cycle < cycles; cycle++) {
+    if (cycles > 1) process.stdout.write(`  cycle ${cycle + 1}/${cycles}...`);
+
+    const start = performance.now();
+    let result;
+    try {
+      result = await backend.parse(query);
+    } catch (e) {
+      console.log(` parse failed: ${e.message}`);
+      return null;
+    }
+    const elapsed = performance.now() - start;
+    totalParseTime += elapsed;
+
+    const currentRss = rss();
+    if (currentRss > peakRss) peakRss = currentRss;
+
+    if (cycle === 0) {
+      const resultJson = JSON.stringify(result);
+      resultSize = Buffer.byteLength(resultJson);
+    }
+
+    // Drop references and let GC + allocator return memory
+    result = null;
+    await gcAndSettle(300);
+
+    const afterCycleRss = rss();
+    if (cycles > 1) {
+      console.log(
+        ` peak=${(currentRss / MB).toFixed(0)} MB, after=${(afterCycleRss / MB).toFixed(0)} MB, ${elapsed.toFixed(0)} ms`
+      );
+    }
   }
-  const parseTime = performance.now() - start;
 
-  const peakRss = rss();
-  const resultJson = JSON.stringify(result);
-  const resultSize = Buffer.byteLength(resultJson);
+  const afterRss = rss();
+  const avgParseTime = totalParseTime / cycles;
 
-  console.log(`Parse time:    ${parseTime.toFixed(0)} ms`);
+  console.log(`Parse time:    ${avgParseTime.toFixed(0)} ms${cycles > 1 ? ` (avg of ${cycles})` : ""}`);
   console.log(`Result size:   ${(resultSize / MB).toFixed(1)} MB`);
   console.log(`Peak RSS:      ${(peakRss / MB).toFixed(1)} MB`);
   console.log(`Peak delta:    +${((peakRss - idleRss) / MB).toFixed(1)} MB`);
-
-  // Drop references and let GC + allocator return memory
-  result = null;
-  if (global.gc) global.gc();
-  await new Promise((r) => setTimeout(r, 500));
-
-  const afterRss = rss();
   console.log(`After free:    ${(afterRss / MB).toFixed(1)} MB`);
   console.log(`Retained:      +${((afterRss - idleRss) / MB).toFixed(1)} MB`);
 
@@ -78,7 +107,7 @@ async function benchmarkParse(backend, label, query) {
     idleRss,
     peakRss,
     afterRss,
-    parseTime,
+    parseTime: avgParseTime,
     resultSize,
     querySize: query.length,
   };
@@ -130,11 +159,6 @@ async function loadWasm() {
   }
 }
 
-function isJemallocLoaded() {
-  return !!(process.env.LD_PRELOAD?.includes("jemalloc") ||
-            process.env.DYLD_INSERT_LIBRARIES?.includes("jemalloc"));
-}
-
 async function main() {
   const flags = new Set(argv.slice(2));
 
@@ -144,10 +168,18 @@ async function main() {
   const small = flags.has("--small");
   const throughput = flags.has("--throughput");
 
+  let cycles = 1;
+  const cyclesIdx = argv.indexOf("--cycles");
+  if (cyclesIdx !== -1 && argv[cyclesIdx + 1]) {
+    cycles = parseInt(argv[cyclesIdx + 1], 10) || 1;
+  }
+
   const query = small ? generateSmallQuery() : generateBigQuery();
+  const allocator = detectAllocator();
 
   console.log("=== libpg-query Memory Benchmark ===");
   console.log(`Node ${process.version}, ${process.platform}-${process.arch}`);
+  console.log(`Allocator: ${allocator}`);
   console.log(`GC exposed: ${typeof global.gc === "function"}`);
   if (typeof global.gc !== "function") {
     console.log("Hint: run with --expose-gc for more accurate measurements");
@@ -158,9 +190,8 @@ async function main() {
   if (runNative) {
     const native = await loadNative();
     if (native) {
-      const jemallocLoaded = isJemallocLoaded();
-      const label = jemallocLoaded ? "Native (jemalloc)" : "Native (system malloc)";
-      results.push(await benchmarkParse(native, label, query));
+      const label = `Native (${allocator})`;
+      results.push(await benchmarkParse(native, label, query, cycles));
       if (throughput) {
         await benchmarkThroughput(native, label);
       }
@@ -170,7 +201,7 @@ async function main() {
   if (runWasm) {
     const wasm = await loadWasm();
     if (wasm) {
-      results.push(await benchmarkParse(wasm, "WASM (emscripten)", query));
+      results.push(await benchmarkParse(wasm, "WASM (emscripten)", query, cycles));
       if (throughput) {
         await benchmarkThroughput(wasm, "WASM (emscripten)");
       }
