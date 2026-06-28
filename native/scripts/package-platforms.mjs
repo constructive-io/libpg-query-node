@@ -6,23 +6,17 @@
  *   node scripts/package-platforms.mjs
  */
 
-import { readdirSync, mkdirSync, copyFileSync, writeFileSync, existsSync } from "fs";
+import { readdirSync, mkdirSync, copyFileSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join, basename } from "path";
 
-const VERSION = "0.1.0";
+const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const VERSION = pkg.version;
 const SCOPE = "@ashbyhq";
 const BASE_NAME = "libpg-query-native";
 const PREBUILDS_DIR = "prebuilds";
 const OUT_DIR = "packages";
 
-const PLATFORM_META = {
-  "darwin-arm64": { os: ["darwin"], cpu: ["arm64"] },
-  "darwin-x64": { os: ["darwin"], cpu: ["x64"] },
-  "linux-x64": { os: ["linux"], cpu: ["x64"] },
-  "linux-arm64": { os: ["linux"], cpu: ["arm64"] },
-  "linux-x64-musl": { os: ["linux"], cpu: ["x64"], libc: ["musl"] },
-  "linux-arm64-musl": { os: ["linux"], cpu: ["arm64"], libc: ["musl"] },
-};
+const PLATFORMS = JSON.parse(readFileSync("platforms.json", "utf8"));
 
 if (!existsSync(PREBUILDS_DIR)) {
   console.error(`No ${PREBUILDS_DIR}/ directory found. Run 'make build' first.`);
@@ -32,7 +26,7 @@ if (!existsSync(PREBUILDS_DIR)) {
 const platforms = readdirSync(PREBUILDS_DIR);
 
 for (const platform of platforms) {
-  const meta = PLATFORM_META[platform];
+  const meta = PLATFORMS[platform];
   if (!meta) {
     console.warn(`Skipping unknown platform: ${platform}`);
     continue;

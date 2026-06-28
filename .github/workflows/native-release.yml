@@ -1,0 +1,115 @@
+name: Native Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.1.0)"
+        required: true
+      dry-run:
+        description: "Dry run (skip npm publish)"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/native-build.yml
+    with:
+      upload-retention-days: 1
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download all prebuilds
+        uses: actions/download-artifact@v4
+        with:
+          path: native/prebuilds
+          pattern: prebuild-*
+          merge-multiple: false
+
+      - name: Arrange prebuilds into expected layout
+        working-directory: native
+        run: |
+          for dir in prebuilds/prebuild-*/; do
+            platform=$(basename "$dir" | sed 's/prebuild-//')
+            mkdir -p "prebuilds/${platform}"
+            mv "${dir}libpg_query_native.node" "prebuilds/${platform}/"
+            rmdir "$dir"
+          done
+          echo "Prebuilds:"
+          find prebuilds -name '*.node' | sort
+
+      - name: Set version
+        working-directory: native
+        run: |
+          npm version "${{ inputs.version }}" --no-git-tag-version
+          node scripts/sync-optional-deps.mjs
+          echo "Version set to ${{ inputs.version }}"
+
+      - name: Install dependencies
+        working-directory: native
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: native
+        run: npx tsc
+
+      - name: Generate platform packages
+        working-directory: native
+        run: node scripts/package-platforms.mjs
+
+      - name: Publish platform packages
+        if: ${{ !inputs.dry-run }}
+        working-directory: native
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg_dir in packages/*/; do
+            echo "Publishing $(basename $pkg_dir)..."
+            cd "$pkg_dir"
+            npm publish --access public
+            cd ../..
+          done
+
+      - name: Publish main package
+        if: ${{ !inputs.dry-run }}
+        working-directory: native
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Dry run summary
+        if: ${{ inputs.dry-run }}
+        working-directory: native
+        run: |
+          echo "=== DRY RUN ==="
+          echo ""
+          echo "Would publish version ${{ inputs.version }}:"
+          echo ""
+          echo "Platform packages:"
+          for pkg_dir in packages/*/; do
+            size=$(du -h "${pkg_dir}libpg_query_native.node" | cut -f1)
+            echo "  $(basename $pkg_dir): ${size}"
+          done
+          echo ""
+          echo "Main package: @ashbyhq/libpg-query-native"
+          echo ""
+          echo "To publish for real, re-run with dry-run unchecked."
+
+      - name: Create git tag
+        if: ${{ !inputs.dry-run }}
+        run: |
+          git tag "native-v${{ inputs.version }}"
+          git push origin "native-v${{ inputs.version }}"

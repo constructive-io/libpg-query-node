@@ -1,0 +1,93 @@
+name: Native CI
+
+on:
+  push:
+    branches: [napi-jemalloc, main]
+    paths:
+      - "native/**"
+      - ".github/workflows/native-ci.yml"
+      - ".github/workflows/native-build.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-ci.yml"
+      - ".github/workflows/native-build.yml"
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/native-build.yml
+    with:
+      upload-retention-days: 3
+
+  package-test-matrix:
+    name: Generate package test matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.gen.outputs.include }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        run: |
+          include=$(node -e "
+            const p = require('./native/platforms.json');
+            const matrix = Object.entries(p).map(([key, v]) => ({
+              platform: key,
+              runner: v.runner,
+              container: v.container || '',
+              musl: !!v.libc,
+            }));
+            console.log(JSON.stringify(matrix));
+          ")
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+
+  package-test:
+    name: Package test ${{ matrix.platform }}
+    needs: [build, package-test-matrix]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.package-test-matrix.outputs.include) }}
+    container: ${{ matrix.container || '' }}
+    steps:
+      - name: Install Alpine deps
+        if: matrix.musl
+        run: apk add --no-cache git
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: "!matrix.musl"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download prebuild
+        uses: actions/download-artifact@v4
+        with:
+          name: prebuild-${{ matrix.platform }}
+          path: native/prebuilds/${{ matrix.platform }}
+
+      - name: Install, build TS, and generate platform package
+        working-directory: native
+        run: |
+          npm install
+          npx tsc
+          node scripts/package-platforms.mjs
+
+      - name: Install package in isolated directory
+        run: |
+          mkdir -p /tmp/smoke-test
+          cd /tmp/smoke-test
+          npm init -y
+          npm install "$GITHUB_WORKSPACE/native" --install-strategy=nested
+          # Install the platform package from generated dir
+          platform_pkg=$(ls -d "$GITHUB_WORKSPACE/native/packages/"*${{ matrix.platform }}*)
+          npm install "$platform_pkg" --install-strategy=nested
+
+      - name: Run smoke test
+        run: |
+          cd /tmp/smoke-test
+          cp "$GITHUB_WORKSPACE/native/test/smoke.mjs" smoke.mjs
+          node smoke.mjs

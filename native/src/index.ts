@@ -62,28 +62,21 @@ function loadNativeAddon(): NativeAddon {
     // fall through to platform package
   }
 
-  const packageMap: Record<string, string> = {
-    "darwin-arm64": "@ashbyhq/libpg-query-native-darwin-arm64",
-    "darwin-x64": "@ashbyhq/libpg-query-native-darwin-x64",
-    "linux-x64": "@ashbyhq/libpg-query-native-linux-x64",
-    "linux-arm64": "@ashbyhq/libpg-query-native-linux-arm64",
-    "linux-x64-musl": "@ashbyhq/libpg-query-native-linux-x64-musl",
-    "linux-arm64-musl": "@ashbyhq/libpg-query-native-linux-arm64-musl",
-  };
+  const platforms: Record<string, unknown> = require("../platforms.json");
+  const pkgName = `@ashbyhq/libpg-query-native-${platformKey}`;
 
-  const pkg = packageMap[platformKey];
-  if (!pkg) {
+  if (!platforms[platformKey]) {
     throw new Error(
       `Unsupported platform: ${platformKey}. ` +
-        `Supported: ${Object.keys(packageMap).join(", ")}`
+        `Supported: ${Object.keys(platforms).join(", ")}`
     );
   }
 
   try {
-    return require(pkg);
+    return require(pkgName);
   } catch {
     throw new Error(
-      `Native addon not found for ${platformKey}. Install ${pkg} or ensure it's in your dependencies.`
+      `Native addon not found for ${platformKey}. Install ${pkgName} or ensure it's in your dependencies.`
     );
   }
 }

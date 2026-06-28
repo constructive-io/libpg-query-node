@@ -1,0 +1,75 @@
+name: Native Build (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      upload-retention-days:
+        type: number
+        default: 7
+
+jobs:
+  matrix:
+    name: Generate matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.gen.outputs.include }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        run: |
+          include=$(node -e "
+            const p = require('./native/platforms.json');
+            const matrix = Object.entries(p).map(([key, v]) => ({
+              platform: key,
+              runner: v.runner,
+              container: v.container || '',
+              musl: !!v.libc,
+            }));
+            console.log(JSON.stringify(matrix));
+          ")
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    container: ${{ matrix.container || '' }}
+    steps:
+      - name: Install Alpine build deps
+        if: matrix.musl
+        run: apk add --no-cache git make g++ python3
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: "!matrix.musl"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: native
+        run: npm install
+
+      - name: Build native addon
+        working-directory: native
+        run: make build
+
+      - name: Build TypeScript
+        working-directory: native
+        run: npx tsc
+
+      - name: Run tests
+        working-directory: native
+        run: npm test
+
+      - name: Upload prebuild
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ matrix.platform }}
+          path: native/prebuilds/${{ matrix.platform }}/libpg_query_native.node
+          retention-days: ${{ inputs.upload-retention-days }}

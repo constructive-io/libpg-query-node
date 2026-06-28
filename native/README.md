@@ -4,20 +4,37 @@ Native N-API PostgreSQL query parser — a memory-efficient alternative to the W
 
 ## Why native?
 
-The WASM build (`@libpg-query/parser`) has unavoidable memory behavior for large queries:
-- Peak RSS ~935 MB for a 2.74 MB query (vs ~70 MB native with jemalloc)
-- WebAssembly linear memory never shrinks — RSS ratchets up permanently
-- No allocator can fix this within WASM constraints
+The WASM build (`@libpg-query/parser`) carries a structural memory cost: WebAssembly
+linear memory only ever grows. Once a large parse expands the heap, that memory is
+never returned to the OS, so a process that parses one big query keeps the high-water
+mark for its lifetime, and repeated large parses ratchet RSS upward monotonically.
+No allocator choice can change this — it's a property of the WASM memory model.
 
-The native build eliminates both problems. With jemalloc preloaded, RSS tracks the live set and returns to baseline after each parse.
+The native build removes that ceiling: it uses the host allocator, so freed memory can
+actually be returned to the OS. Pairing it with **jemalloc** (via `LD_PRELOAD` /
+`DYLD_INSERT_LIBRARIES`) roughly halves peak RSS and, more importantly, keeps it
+*stable* across repeated large parses instead of ratcheting.
 
-```
-                  idle     big-query peak   ratchet     throughput
-WASM (today)      32 MB    935 MB           permanent   126k/s
-Native            ~4 MB    ~70 MB*          none*       259k/s
-```
+### Measured: native, system malloc vs jemalloc
 
-\* With jemalloc. Without jemalloc, macOS libmalloc retains ~274 MB (still 3.5x better than WASM).
+Parsing a 3.31 MB SQL query (1500× `UNION ALL`, ~65 MB JSON parse tree), 3 parse/free
+cycles, `darwin-arm64`, Node 24. Peak is the max RSS during a parse; "after" is RSS
+once the result is dropped and GC settles.
+
+| Allocator | cycle 1 peak | cycle 2 peak | cycle 3 peak | retained after |
+|-----------|-------------|-------------|-------------|----------------|
+| system malloc | 649 MB | 867 MB | **932 MB** | 867 MB |
+| jemalloc | 381 MB | 497 MB | **498 MB** | 433 MB |
+| jemalloc (`dirty_decay_ms:0,muzzy_decay_ms:0`) | 377 MB | 477 MB | **477 MB** | 411 MB |
+
+System malloc climbs every cycle (649 → 932 MB) — it fragments and holds the freed
+arenas. jemalloc stabilizes at ~498 MB by cycle 2 and stays there. Throughput is
+identical either way (~140k small-query parses/sec on this machine), so jemalloc is a
+pure memory win with no speed cost.
+
+Reproduce with `bash benchmark/compare-allocators.sh --cycles 3`. A side-by-side against
+the WASM backend is available via `node --expose-gc benchmark/memory.mjs --all` once
+`@libpg-query/parser` is installed.
 
 ## Installation
 
@@ -25,15 +42,44 @@ Native            ~4 MB    ~70 MB*          none*       259k/s
 npm install @ashbyhq/libpg-query-native
 ```
 
-Platform-specific binaries are installed automatically via optional dependencies:
-- `@ashbyhq/libpg-query-native-darwin-arm64`
-- `@ashbyhq/libpg-query-native-darwin-x64`
-- `@ashbyhq/libpg-query-native-linux-x64`
-- `@ashbyhq/libpg-query-native-linux-arm64`
-- `@ashbyhq/libpg-query-native-linux-x64-musl`
-- `@ashbyhq/libpg-query-native-linux-arm64-musl`
+Platform-specific binaries ship as separate packages and are installed
+automatically via optional dependencies. Each declares `os`/`cpu`/`libc`, so
+npm and Yarn install **only** the one matching the host:
+
+| Package | `os` | `cpu` | `libc` |
+|---------|------|-------|--------|
+| `@ashbyhq/libpg-query-native-darwin-arm64` | darwin | arm64 | — |
+| `@ashbyhq/libpg-query-native-darwin-x64` | darwin | x64 | — |
+| `@ashbyhq/libpg-query-native-linux-x64` | linux | x64 | glibc |
+| `@ashbyhq/libpg-query-native-linux-arm64` | linux | arm64 | glibc |
+| `@ashbyhq/libpg-query-native-linux-x64-musl` | linux | x64 | musl |
+| `@ashbyhq/libpg-query-native-linux-arm64-musl` | linux | arm64 | musl |
+
+glibc and musl builds are marked mutually exclusive, so an Alpine host pulls the
+musl binary and a Debian/Ubuntu host pulls the glibc one — never both.
 
 No node-gyp or compiler toolchain needed at install time.
+
+### Cross-architecture installs
+
+When building for a target that differs from the install host (e.g. a Linux
+Docker image built on an Apple Silicon Mac), tell the package manager which
+architectures to fetch:
+
+```bash
+# npm
+npm install --os=linux --cpu=x64 --libc=glibc
+
+# Yarn Berry — in .yarnrc.yml
+supportedArchitectures:
+  os: [linux]
+  cpu: [x64]
+  libc: [glibc]
+```
+
+> Note: Yarn Classic (1.x) honors `os`/`cpu` but not `libc`. On musl hosts it may
+> install both Linux variants; the runtime loader still selects the correct one
+> via musl detection.
 
 ## Usage
 
@@ -84,7 +130,7 @@ ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 # Quick sanity check
 node --expose-gc benchmark/memory.mjs --small
 
-# Full benchmark (large query, ~2.74 MB SQL)
+# Full benchmark (large query, ~3.31 MB SQL)
 node --expose-gc benchmark/memory.mjs
 
 # Compare with/without jemalloc

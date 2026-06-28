@@ -12,7 +12,8 @@
     }
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "platforms.json"
   ],
   "scripts": {
     "build:native": "make build",
