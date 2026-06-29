@@ -26,7 +26,7 @@ jobs:
     outputs:
       include: ${{ steps.gen.outputs.include }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: gen
         run: |
           include=$(node -e "
@@ -55,7 +55,7 @@ jobs:
         if: matrix.musl
         run: apk add --no-cache git
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         if: "!matrix.musl"
@@ -65,7 +65,7 @@ jobs:
           package-manager-cache: false
 
       - name: Download prebuild
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}

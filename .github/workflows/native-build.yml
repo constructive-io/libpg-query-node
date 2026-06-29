@@ -14,7 +14,7 @@ jobs:
     outputs:
       include: ${{ steps.gen.outputs.include }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: gen
         run: |
           include=$(node -e "
@@ -43,7 +43,7 @@ jobs:
         if: matrix.musl
         run: apk add --no-cache git make g++ python3
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         if: "!matrix.musl"
@@ -69,7 +69,7 @@ jobs:
         run: npm test
 
       - name: Upload prebuild
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}/libpg_query_native.node
