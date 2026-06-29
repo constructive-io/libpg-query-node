@@ -15,6 +15,24 @@
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://img.shields.io/badge/Linux-available-333333?logo=linux&logoColor=white" /></a>
 </p>
 
+> [!IMPORTANT]
+> **This fork (`ashbyhq`) builds only the native N-API addon, for Node.js.**
+>
+> CI builds, tests, and publishes a single package — [`@ashbyhq/libpg-query-native`](native/) —
+> a native Node.js addon (PostgreSQL 18). There are **no WASM, browser, Deno, or
+> Worker builds**, and there is no WASM build in CI.
+>
+> The WASM packages documented below (`libpg-query`, `@pgsql/parser`, etc.) remain
+> in the tree for reference and upstream parity, but **this repository does not build
+> or publish them**. For the native addon — install, API, platform support, and the
+> native-vs-WASM memory comparison — see **[`native/README.md`](native/README.md)**.
+>
+> ```bash
+> npm install @ashbyhq/libpg-query-native
+> ```
+>
+> The original upstream WASM documentation follows.
+
 # The Real PostgreSQL Parser for JavaScript
 
 ### Bring the power of PostgreSQL's native parser to your TypeScript projects — no native builds, no platform headaches.
