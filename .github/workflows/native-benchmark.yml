@@ -1,0 +1,68 @@
+name: Native Benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - ".github/workflows/native-benchmark.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-benchmark.yml"
+
+# Cancel superseded runs on the same ref so baselines aren't raced.
+concurrency:
+  group: native-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # push the baseline to gh-pages (on main)
+  pull-requests: write # comment on PRs when a regression alerts
+
+jobs:
+  benchmark:
+    name: Benchmark (linux-x64, jemalloc)
+    # Pinned to a single runner so stored baselines stay comparable.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install jemalloc
+        run: sudo apt-get update && sudo apt-get install -y libjemalloc2
+
+      - name: Build native addon
+        working-directory: native
+        run: |
+          npm install
+          make build PLATFORM_KEY=linux-x64
+          npx tsc
+
+      - name: Run benchmark (under jemalloc)
+        working-directory: native
+        env:
+          LD_PRELOAD: /usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+        run: node --expose-gc benchmark/ci-bench.mjs --out "$GITHUB_WORKSPACE/benchmark-results.json"
+
+      - name: Track results and compare against baseline
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: native libpg-query (linux-x64, jemalloc)
+          tool: customSmallerIsBetter
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Store/track history on gh-pages, but only write/push from main.
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench/native
+          auto-push: ${{ github.event_name == 'push' }}
+          save-data-file: ${{ github.event_name == 'push' }}
+          # Report every run; fail only on a large (2x) regression.
+          summary-always: true
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-threshold: "200%"

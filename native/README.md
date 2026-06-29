@@ -148,7 +148,21 @@ node --expose-gc benchmark/memory.mjs --throughput
 
 # Compare against WASM (requires @libpg-query/parser installed)
 node --expose-gc benchmark/memory.mjs --all
+
+# CI regression benchmark (emits github-action-benchmark JSON)
+node --expose-gc benchmark/ci-bench.mjs --out results.json
 ```
+
+### Regression tracking in CI
+
+The `Native Benchmark` workflow runs `ci-bench.mjs` on a fixed runner
+(ubuntu-24.04, under jemalloc) for every PR and push to `main`. It tracks four
+smaller-is-better metrics — large-query parse time, peak RSS, retained RSS, and
+small-query latency — against a baseline stored on the `gh-pages` branch. Each
+run posts the per-metric difference to the job summary; a regression beyond
+**2× the baseline** comments on the PR and fails the check. The threshold is
+deliberately conservative (`alert-threshold: 200%`) to tolerate shared-runner
+noise — tune it in `.github/workflows/native-benchmark.yml`.
 
 ## Building from source
 
