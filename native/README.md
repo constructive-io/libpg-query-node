@@ -15,26 +15,34 @@ actually be returned to the OS. Pairing it with **jemalloc** (via `LD_PRELOAD` /
 `DYLD_INSERT_LIBRARIES`) roughly halves peak RSS and, more importantly, keeps it
 *stable* across repeated large parses instead of ratcheting.
 
-### Measured: native, system malloc vs jemalloc
+### Measured: native vs WASM
 
 Parsing a 3.31 MB SQL query (1500× `UNION ALL`, ~65 MB JSON parse tree), 3 parse/free
-cycles, `darwin-arm64`, Node 24. Peak is the max RSS during a parse; "after" is RSS
-once the result is dropped and GC settles.
+cycles, `darwin-arm64`, Node 24. Each backend measured in its own process. "Retained"
+is RSS after the result is dropped and GC settles; throughput is a small query ×10k.
 
-| Allocator | cycle 1 peak | cycle 2 peak | cycle 3 peak | retained after |
-|-----------|-------------|-------------|-------------|----------------|
-| system malloc | 649 MB | 867 MB | **932 MB** | 867 MB |
-| jemalloc | 381 MB | 497 MB | **498 MB** | 433 MB |
-| jemalloc (`dirty_decay_ms:0,muzzy_decay_ms:0`) | 377 MB | 477 MB | **477 MB** | 411 MB |
+| Backend | idle RSS | peak RSS (max of 3) | retained after free | throughput |
+|---------|---------|---------------------|---------------------|------------|
+| WASM (`@libpg-query/parser`) | 93 MB | 1359 MB | **+1202 MB** (never shrinks) | 125k/s |
+| Native — system malloc | 53 MB | 932 MB | +812 MB (ratchets up) | 139k/s |
+| Native — **jemalloc** | 55 MB | **498 MB** | **+377 MB** (stabilizes) | 139k/s |
 
-System malloc climbs every cycle (649 → 932 MB) — it fragments and holds the freed
-arenas. jemalloc stabilizes at ~498 MB by cycle 2 and stays there. Throughput is
-identical either way (~140k small-query parses/sec on this machine), so jemalloc is a
-pure memory win with no speed cost.
+Per-cycle peak progression:
 
-Reproduce with `bash benchmark/compare-allocators.sh --cycles 3`. A side-by-side against
-the WASM backend is available via `node --expose-gc benchmark/memory.mjs --all` once
-`@libpg-query/parser` is installed.
+```
+WASM:            1261 → 1359 → 1359 MB   (plateaus at a high permanent floor)
+Native system:    649 →  867 →  932 MB   (fragments, still climbing)
+Native jemalloc:  381 →  497 →  498 MB   (flat after cycle 2)
+```
+
+WASM linear memory only ever grows, so ~1.2 GB from one big parse is held for the
+process lifetime. Native + system malloc is lower but still ratchets. Native +
+jemalloc has ~2.7× lower peak than WASM, returns freed pages to the OS, and stabilizes.
+`MALLOC_CONF=dirty_decay_ms:0,muzzy_decay_ms:0` trims peak a little further (~477 MB).
+Throughput is identical across allocators — jemalloc is a pure memory win.
+
+Reproduce with `node --expose-gc benchmark/memory.mjs --all --cycles 3` (with
+`@libpg-query/parser` installed) and `bash benchmark/compare-allocators.sh --cycles 3`.
 
 ## Installation
 
