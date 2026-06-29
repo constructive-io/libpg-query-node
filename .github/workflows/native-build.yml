@@ -56,7 +56,7 @@ jobs:
         run: |
           npm install
           make build PLATFORM_KEY=${{ matrix.platform }}
-          npx tsc
+          npm run build:ts
           npm test
 
       - name: Build and test (musl, in Alpine container)
@@ -67,7 +67,7 @@ jobs:
               apk add --no-cache git make g++ python3 &&
               npm install &&
               make build PLATFORM_KEY=${{ matrix.platform }} &&
-              npx tsc &&
+              npm run build:ts &&
               npm test
             '
 

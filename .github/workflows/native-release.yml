@@ -65,7 +65,7 @@ jobs:
 
       - name: Build TypeScript
         working-directory: native
-        run: npx tsc
+        run: npm run build:ts
 
       - name: Generate platform packages
         working-directory: native

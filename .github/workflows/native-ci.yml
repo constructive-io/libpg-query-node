@@ -76,7 +76,7 @@ jobs:
         run: |
           cd native
           npm install
-          npx tsc
+          npm run build:ts
           node scripts/package-platforms.mjs
           mkdir -p dist-packs
           npm pack --pack-destination "$PWD/dist-packs"
@@ -94,7 +94,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE/native:/work" -w /work \
             "${{ matrix.container }}" sh -c '
               apk add --no-cache git &&
-              npm install && npx tsc && node scripts/package-platforms.mjs &&
+              npm install && npm run build:ts && node scripts/package-platforms.mjs &&
               mkdir -p dist-packs &&
               npm pack --pack-destination /work/dist-packs &&
               (cd packages/libpg-query-native-${{ matrix.platform }} && npm pack --pack-destination /work/dist-packs) &&

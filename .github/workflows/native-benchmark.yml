@@ -41,7 +41,7 @@ jobs:
         run: |
           npm install
           make build PLATFORM_KEY=linux-x64
-          npx tsc
+          npm run build:ts
 
       - name: Run benchmark (under jemalloc)
         working-directory: native
