@@ -37,36 +37,39 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.matrix.outputs.include) }}
-    container: ${{ matrix.container || '' }}
+    # No job-level `container`: JavaScript actions (checkout/setup-node/upload)
+    # can't run inside an Alpine container on arm64 runners. musl builds run via
+    # `docker run` instead, with the host actions executing on the glibc host.
     steps:
-      - name: Install Alpine build deps
-        if: matrix.musl
-        run: apk add --no-cache git make g++ python3
-
       - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        if: "!matrix.musl"
+        if: ${{ !matrix.musl }}
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           package-manager-cache: false
 
-      - name: Install dependencies
+      - name: Build and test (glibc / macOS)
+        if: ${{ !matrix.musl }}
         working-directory: native
-        run: npm install
+        run: |
+          npm install
+          make build PLATFORM_KEY=${{ matrix.platform }}
+          npx tsc
+          npm test
 
-      - name: Build native addon
-        working-directory: native
-        run: make build PLATFORM_KEY=${{ matrix.platform }}
-
-      - name: Build TypeScript
-        working-directory: native
-        run: npx tsc
-
-      - name: Run tests
-        working-directory: native
-        run: npm test
+      - name: Build and test (musl, in Alpine container)
+        if: ${{ matrix.musl }}
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE/native:/work" -w /work \
+            "${{ matrix.container }}" sh -c '
+              apk add --no-cache git make g++ python3 &&
+              npm install &&
+              make build PLATFORM_KEY=${{ matrix.platform }} &&
+              npx tsc &&
+              npm test
+            '
 
       - name: Upload prebuild
         uses: actions/upload-artifact@v7

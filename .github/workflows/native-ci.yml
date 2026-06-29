@@ -49,16 +49,14 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.package-test-matrix.outputs.include) }}
-    container: ${{ matrix.container || '' }}
+    # No job-level `container` (JS actions can't run in an Alpine container on
+    # arm64). The prebuild is downloaded on the glibc host; the musl smoke test
+    # runs in the Alpine image via `docker run`.
     steps:
-      - name: Install Alpine deps
-        if: matrix.musl
-        run: apk add --no-cache git
-
       - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        if: "!matrix.musl"
+        if: ${{ !matrix.musl }}
         uses: actions/setup-node@v6
         with:
           node-version: "20"
@@ -70,34 +68,39 @@ jobs:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}
 
-      - name: Build TS and pack tarballs
-        working-directory: native
+      # Pack the main + platform packages into tarballs and install them in an
+      # isolated dir. Tarballs + --omit=optional install cleanly without registry
+      # lookups for the (unpublished) platform optionalDependencies.
+      - name: Pack, install, smoke test (glibc / macOS)
+        if: ${{ !matrix.musl }}
         run: |
+          cd native
           npm install
           npx tsc
           node scripts/package-platforms.mjs
-          # Pack the main package and this platform's package into tarballs.
-          # Tarballs install cleanly without registry lookups for the (unpublished)
-          # platform optionalDependencies. --pack-destination requires the dir to exist.
-          mkdir -p "$GITHUB_WORKSPACE/native/dist-packs"
-          npm pack --pack-destination "$GITHUB_WORKSPACE/native/dist-packs"
+          mkdir -p dist-packs
+          npm pack --pack-destination "$PWD/dist-packs"
           (cd "packages/libpg-query-native-${{ matrix.platform }}" \
-            && npm pack --pack-destination "$GITHUB_WORKSPACE/native/dist-packs")
-          echo "Packed:"; ls -1 "$GITHUB_WORKSPACE/native/dist-packs"
-
-      - name: Install package in isolated directory
-        run: |
-          mkdir -p /tmp/smoke-test
-          cd /tmp/smoke-test
-          npm init -y >/dev/null
-          # --omit=optional skips the main package's unpublished platform deps;
-          # the matching platform tarball is installed explicitly alongside it.
+            && npm pack --pack-destination "$PWD/../../dist-packs")
+          mkdir -p /tmp/smoke-test && cd /tmp/smoke-test && npm init -y >/dev/null
           npm install --omit=optional "$GITHUB_WORKSPACE/native/dist-packs/"*.tgz
-          echo "Installed @ashbyhq packages:"
-          ls node_modules/@ashbyhq
-
-      - name: Run smoke test
-        run: |
-          cd /tmp/smoke-test
+          echo "Installed @ashbyhq packages:"; ls node_modules/@ashbyhq
           cp "$GITHUB_WORKSPACE/native/test/smoke.mjs" smoke.mjs
           node smoke.mjs
+
+      - name: Pack, install, smoke test (musl, in Alpine container)
+        if: ${{ matrix.musl }}
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE/native:/work" -w /work \
+            "${{ matrix.container }}" sh -c '
+              apk add --no-cache git &&
+              npm install && npx tsc && node scripts/package-platforms.mjs &&
+              mkdir -p dist-packs &&
+              npm pack --pack-destination /work/dist-packs &&
+              (cd packages/libpg-query-native-${{ matrix.platform }} && npm pack --pack-destination /work/dist-packs) &&
+              mkdir -p /tmp/smoke && cd /tmp/smoke && npm init -y >/dev/null &&
+              npm install --omit=optional /work/dist-packs/*.tgz &&
+              echo "Installed @ashbyhq packages:" && ls node_modules/@ashbyhq &&
+              cp /work/test/smoke.mjs smoke.mjs &&
+              node smoke.mjs
+            '
