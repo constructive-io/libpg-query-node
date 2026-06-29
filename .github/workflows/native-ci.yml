@@ -69,22 +69,31 @@ jobs:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}
 
-      - name: Install, build TS, and generate platform package
+      - name: Build TS and pack tarballs
         working-directory: native
         run: |
           npm install
           npx tsc
           node scripts/package-platforms.mjs
+          # Pack the main package and this platform's package into tarballs.
+          # Tarballs install cleanly without registry lookups for the (unpublished)
+          # platform optionalDependencies. --pack-destination requires the dir to exist.
+          mkdir -p "$GITHUB_WORKSPACE/native/dist-packs"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/native/dist-packs"
+          (cd "packages/libpg-query-native-${{ matrix.platform }}" \
+            && npm pack --pack-destination "$GITHUB_WORKSPACE/native/dist-packs")
+          echo "Packed:"; ls -1 "$GITHUB_WORKSPACE/native/dist-packs"
 
       - name: Install package in isolated directory
         run: |
           mkdir -p /tmp/smoke-test
           cd /tmp/smoke-test
-          npm init -y
-          npm install "$GITHUB_WORKSPACE/native" --install-strategy=nested
-          # Install the platform package from generated dir
-          platform_pkg=$(ls -d "$GITHUB_WORKSPACE/native/packages/"*${{ matrix.platform }}*)
-          npm install "$platform_pkg" --install-strategy=nested
+          npm init -y >/dev/null
+          # --omit=optional skips the main package's unpublished platform deps;
+          # the matching platform tarball is installed explicitly alongside it.
+          npm install --omit=optional "$GITHUB_WORKSPACE/native/dist-packs/"*.tgz
+          echo "Installed @ashbyhq packages:"
+          ls node_modules/@ashbyhq
 
       - name: Run smoke test
         run: |
