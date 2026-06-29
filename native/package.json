@@ -1,6 +1,6 @@
 {
   "name": "@ashbyhq/libpg-query-native",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PostgreSQL query parser — native N-API + jemalloc backend",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -48,10 +48,10 @@
     "typescript": "5.9.3"
   },
   "optionalDependencies": {
-    "@ashbyhq/libpg-query-native-darwin-arm64": "0.1.0",
-    "@ashbyhq/libpg-query-native-linux-x64": "0.1.0",
-    "@ashbyhq/libpg-query-native-linux-arm64": "0.1.0",
-    "@ashbyhq/libpg-query-native-linux-x64-musl": "0.1.0",
-    "@ashbyhq/libpg-query-native-linux-arm64-musl": "0.1.0"
+    "@ashbyhq/libpg-query-native-darwin-arm64": "0.1.1",
+    "@ashbyhq/libpg-query-native-linux-x64": "0.1.1",
+    "@ashbyhq/libpg-query-native-linux-arm64": "0.1.1",
+    "@ashbyhq/libpg-query-native-linux-x64-musl": "0.1.1",
+    "@ashbyhq/libpg-query-native-linux-arm64-musl": "0.1.1"
   }
 }
