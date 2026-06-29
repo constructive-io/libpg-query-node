@@ -57,7 +57,6 @@ npm and Yarn install **only** the one matching the host:
 | Package | `os` | `cpu` | `libc` |
 |---------|------|-------|--------|
 | `@ashbyhq/libpg-query-native-darwin-arm64` | darwin | arm64 | — |
-| `@ashbyhq/libpg-query-native-darwin-x64` | darwin | x64 | — |
 | `@ashbyhq/libpg-query-native-linux-x64` | linux | x64 | glibc |
 | `@ashbyhq/libpg-query-native-linux-arm64` | linux | arm64 | glibc |
 | `@ashbyhq/libpg-query-native-linux-x64-musl` | linux | x64 | musl |

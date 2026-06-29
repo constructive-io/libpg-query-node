@@ -59,7 +59,7 @@ jobs:
         if: ${{ !matrix.musl }}
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           package-manager-cache: false
 
       - name: Download prebuild

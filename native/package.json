@@ -49,7 +49,6 @@
   },
   "optionalDependencies": {
     "@ashbyhq/libpg-query-native-darwin-arm64": "0.1.0",
-    "@ashbyhq/libpg-query-native-darwin-x64": "0.1.0",
     "@ashbyhq/libpg-query-native-linux-x64": "0.1.0",
     "@ashbyhq/libpg-query-native-linux-arm64": "0.1.0",
     "@ashbyhq/libpg-query-native-linux-x64-musl": "0.1.0",
