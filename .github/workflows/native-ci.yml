@@ -13,6 +13,9 @@ on:
       - ".github/workflows/native-ci.yml"
       - ".github/workflows/native-build.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build
@@ -20,50 +23,30 @@ jobs:
     with:
       upload-retention-days: 3
 
-  package-test-matrix:
-    name: Generate package test matrix
-    runs-on: ubuntu-24.04
-    outputs:
-      include: ${{ steps.gen.outputs.include }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: gen
-        run: |
-          include=$(node -e "
-            const p = require('./native/platforms.json');
-            const matrix = Object.entries(p).map(([key, v]) => ({
-              platform: key,
-              runner: v.runner,
-              container: v.container || '',
-              musl: (v.libc || []).includes('musl'),
-            }));
-            console.log(JSON.stringify(matrix));
-          ")
-          echo "include=${include}" >> "$GITHUB_OUTPUT"
-
   package-test:
     name: Package test ${{ matrix.platform }}
-    needs: [build, package-test-matrix]
+    needs: build
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
+      # Reuse the matrix the build workflow already derived from platforms.json.
       matrix:
-        include: ${{ fromJSON(needs.package-test-matrix.outputs.include) }}
+        include: ${{ fromJSON(needs.build.outputs.matrix) }}
     # No job-level `container` (JS actions can't run in an Alpine container on
     # arm64). The prebuild is downloaded on the glibc host; the musl smoke test
     # runs in the Alpine image via `docker run`.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Node.js
         if: ${{ !matrix.musl }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
           package-manager-cache: false
 
       - name: Download prebuild
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}
@@ -73,6 +56,8 @@ jobs:
       # lookups for the (unpublished) platform optionalDependencies.
       - name: Pack, install, smoke test (glibc / macOS)
         if: ${{ !matrix.musl }}
+        env:
+          PLATFORM_KEY: ${{ matrix.platform }}
         run: |
           cd native
           npm install
@@ -80,7 +65,7 @@ jobs:
           node scripts/package-platforms.mjs
           mkdir -p dist-packs
           npm pack --pack-destination "$PWD/dist-packs"
-          (cd "packages/libpg-query-native-${{ matrix.platform }}" \
+          (cd "packages/libpg-query-native-$PLATFORM_KEY" \
             && npm pack --pack-destination "$PWD/../../dist-packs")
           mkdir -p /tmp/smoke-test && cd /tmp/smoke-test && npm init -y >/dev/null
           npm install --omit=optional "$GITHUB_WORKSPACE/native/dist-packs/"*.tgz
@@ -90,14 +75,17 @@ jobs:
 
       - name: Pack, install, smoke test (musl, in Alpine container)
         if: ${{ matrix.musl }}
+        env:
+          PLATFORM_KEY: ${{ matrix.platform }}
+          CONTAINER: ${{ matrix.container }}
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE/native:/work" -w /work \
-            "${{ matrix.container }}" sh -c '
+          docker run --rm -e PLATFORM_KEY -v "$GITHUB_WORKSPACE/native:/work" -w /work \
+            "$CONTAINER" sh -c '
               apk add --no-cache git &&
               npm install && npm run build:ts && node scripts/package-platforms.mjs &&
               mkdir -p dist-packs &&
               npm pack --pack-destination /work/dist-packs &&
-              (cd packages/libpg-query-native-${{ matrix.platform }} && npm pack --pack-destination /work/dist-packs) &&
+              (cd "packages/libpg-query-native-$PLATFORM_KEY" && npm pack --pack-destination /work/dist-packs) &&
               mkdir -p /tmp/smoke && cd /tmp/smoke && npm init -y >/dev/null &&
               npm install --omit=optional /work/dist-packs/*.tgz &&
               echo "Installed @ashbyhq packages:" && ls node_modules/@ashbyhq &&

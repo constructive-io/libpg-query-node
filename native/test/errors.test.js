@@ -7,6 +7,7 @@ describe("Error Handling", () => {
     it("should include sqlDetails property on parse errors", () => {
       try {
         parseSync("SELECT * FROM users WHERE id = @");
+        assert.fail("Expected error");
       } catch (error) {
         assert.ok("sqlDetails" in error);
         assert.ok("message" in error.sqlDetails);

@@ -59,10 +59,14 @@ INCLUDES := \
 	-I$(NODE_ADDON_API_DIR) \
 	$(if $(NODE_INCLUDE),-I$(NODE_INCLUDE),)
 
-# Clone and build libpg_query
+# Clone and build libpg_query. Clone into a temp dir and move into place only on
+# success, so an interrupted clone can't leave a poisoned (partial) cache dir
+# that later builds would mistake for a complete checkout.
 $(LIBPG_QUERY_DIR):
 	mkdir -p $(CACHE_DIR)
-	git clone -b $(LIBPG_QUERY_TAG) --single-branch --depth 1 $(LIBPG_QUERY_REPO) $(LIBPG_QUERY_DIR)
+	rm -rf $(LIBPG_QUERY_DIR).tmp
+	git clone -b $(LIBPG_QUERY_TAG) --single-branch --depth 1 $(LIBPG_QUERY_REPO) $(LIBPG_QUERY_DIR).tmp
+	mv $(LIBPG_QUERY_DIR).tmp $(LIBPG_QUERY_DIR)
 
 $(LIBPG_QUERY_LIB): $(LIBPG_QUERY_DIR)
 	cd $(LIBPG_QUERY_DIR) && $(MAKE) build

@@ -195,6 +195,10 @@ async function main() {
       if (throughput) {
         await benchmarkThroughput(native, label);
       }
+    } else {
+      // A requested backend failed to load — fail loudly rather than
+      // reporting a "successful" run that benchmarked nothing.
+      process.exitCode = 1;
     }
   }
 
@@ -205,6 +209,8 @@ async function main() {
       if (throughput) {
         await benchmarkThroughput(wasm, "WASM (emscripten)");
       }
+    } else {
+      process.exitCode = 1;
     }
   }
 

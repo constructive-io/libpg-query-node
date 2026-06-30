@@ -29,16 +29,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
           package-manager-cache: false
           registry-url: "https://registry.npmjs.org"
 
       - name: Download all prebuilds
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: native/prebuilds
           pattern: prebuild-*
@@ -58,15 +58,19 @@ jobs:
 
       - name: Set version
         working-directory: native
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          npm version "${{ inputs.version }}" --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version
           node scripts/sync-optional-deps.mjs
-          echo "Version set to ${{ inputs.version }}"
+          echo "Version set to $VERSION"
 
       - name: Determine npm dist-tag
+        env:
+          VERSION: ${{ inputs.version }}
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
-          VERSION="${{ inputs.version }}"
-          TAG="${{ inputs.tag }}"
+          TAG="$TAG_INPUT"
           if [ -z "$TAG" ]; then
             case "$VERSION" in
               *-*)
@@ -126,10 +130,12 @@ jobs:
       - name: Dry run summary
         if: ${{ inputs.dry-run }}
         working-directory: native
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           echo "=== DRY RUN ==="
           echo ""
-          echo "Would publish version ${{ inputs.version }} with dist-tag: $NPM_TAG"
+          echo "Would publish version $VERSION with dist-tag: $NPM_TAG"
           echo ""
           echo "Platform packages:"
           for pkg_dir in packages/*/; do
@@ -143,6 +149,8 @@ jobs:
 
       - name: Create git tag
         if: ${{ !inputs.dry-run }}
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          git tag "native-v${{ inputs.version }}"
-          git push origin "native-v${{ inputs.version }}"
+          git tag "native-v$VERSION"
+          git push origin "native-v$VERSION"

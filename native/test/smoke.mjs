@@ -22,9 +22,9 @@ function assert(condition, message) {
   }
 }
 
-function test(name, fn) {
+async function test(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`  ok  ${name}`);
   } catch (e) {
     console.error(`  FAIL  ${name}: ${e.message}`);
@@ -38,45 +38,45 @@ console.log(`Platform: ${process.platform}-${process.arch}`);
 console.log(`Node: ${process.version}`);
 console.log("");
 
-test("parseSync returns parse tree", () => {
+await test("parseSync returns parse tree", () => {
   const result = lib.parseSync("SELECT 1");
   assert(result.version > 0, "version should be positive");
   assert(result.stmts.length === 1, "should have 1 statement");
   assert(result.stmts[0].stmt.SelectStmt, "should have SelectStmt");
 });
 
-test("parse (async) works", async () => {
+await test("parse (async) works", async () => {
   const result = await lib.parse("SELECT 1");
   assert(result.stmts.length === 1, "should have 1 statement");
 });
 
-test("fingerprintSync returns hex string", () => {
+await test("fingerprintSync returns hex string", () => {
   const fp = lib.fingerprintSync("SELECT 1");
   assert(typeof fp === "string", "should be string");
   assert(fp.length === 16, "should be 16 chars");
   assert(/^[0-9a-f]+$/.test(fp), "should be hex");
 });
 
-test("normalizeSync replaces constants", () => {
+await test("normalizeSync replaces constants", () => {
   const result = lib.normalizeSync("SELECT 1, 'hello'");
   assert(result.includes("$1"), "should have $1");
   assert(!result.includes("hello"), "should not have literal");
 });
 
-test("scanSync returns tokens", () => {
+await test("scanSync returns tokens", () => {
   const result = lib.scanSync("SELECT id FROM users");
   assert(result.tokens.length > 0, "should have tokens");
   assert(result.tokens[0].text === "SELECT", "first token should be SELECT");
 });
 
-test("parsePlPgSQLSync works", () => {
+await test("parsePlPgSQLSync works", () => {
   const result = lib.parsePlPgSQLSync(
     "CREATE FUNCTION test() RETURNS void AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql"
   );
   assert(result.plpgsql_funcs, "should have plpgsql_funcs");
 });
 
-test("parseSync throws SqlError on bad SQL", () => {
+await test("parseSync throws SqlError on bad SQL", () => {
   try {
     lib.parseSync("SELECTT");
     assert(false, "should have thrown");
@@ -87,7 +87,7 @@ test("parseSync throws SqlError on bad SQL", () => {
   }
 });
 
-test("loadModule is a no-op", async () => {
+await test("loadModule is a no-op", async () => {
   await lib.loadModule();
 });
 

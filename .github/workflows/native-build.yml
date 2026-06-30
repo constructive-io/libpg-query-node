@@ -6,6 +6,13 @@ on:
       upload-retention-days:
         type: number
         default: 7
+    outputs:
+      matrix:
+        description: "JSON build matrix derived from native/platforms.json"
+        value: ${{ jobs.matrix.outputs.include }}
+
+permissions:
+  contents: read
 
 jobs:
   matrix:
@@ -14,7 +21,7 @@ jobs:
     outputs:
       include: ${{ steps.gen.outputs.include }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - id: gen
         run: |
           include=$(node -e "
@@ -41,11 +48,11 @@ jobs:
     # can't run inside an Alpine container on arm64 runners. musl builds run via
     # `docker run` instead, with the host actions executing on the glibc host.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Node.js
         if: ${{ !matrix.musl }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
           package-manager-cache: false
@@ -53,26 +60,31 @@ jobs:
       - name: Build and test (glibc / macOS)
         if: ${{ !matrix.musl }}
         working-directory: native
+        env:
+          PLATFORM_KEY: ${{ matrix.platform }}
         run: |
           npm install
-          make build PLATFORM_KEY=${{ matrix.platform }}
+          make build PLATFORM_KEY="$PLATFORM_KEY"
           npm run build:ts
           npm test
 
       - name: Build and test (musl, in Alpine container)
         if: ${{ matrix.musl }}
+        env:
+          PLATFORM_KEY: ${{ matrix.platform }}
+          CONTAINER: ${{ matrix.container }}
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE/native:/work" -w /work \
-            "${{ matrix.container }}" sh -c '
+          docker run --rm -e PLATFORM_KEY -v "$GITHUB_WORKSPACE/native:/work" -w /work \
+            "$CONTAINER" sh -c '
               apk add --no-cache git make g++ python3 &&
               npm install &&
-              make build PLATFORM_KEY=${{ matrix.platform }} &&
+              make build PLATFORM_KEY="$PLATFORM_KEY" &&
               npm run build:ts &&
               npm test
             '
 
       - name: Upload prebuild
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuild-${{ matrix.platform }}
           path: native/prebuilds/${{ matrix.platform }}/libpg_query_native.node

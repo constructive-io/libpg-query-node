@@ -131,6 +131,11 @@ RUN apt-get install -y libjemalloc2
 ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 ```
 
+> The `libjemalloc.so.2` path above is for Debian/Ubuntu on x86_64. It differs by
+> distro and architecture (e.g. `/usr/lib/aarch64-linux-gnu/libjemalloc.so.2` on
+> arm64, `/usr/lib64/libjemalloc.so.2` on RHEL/Fedora). Find it with
+> `ldconfig -p | grep jemalloc`.
+
 ## Benchmarks
 
 ```bash

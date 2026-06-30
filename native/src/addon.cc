@@ -1,4 +1,5 @@
 #include <napi.h>
+#include <cstdio>
 #include <string>
 
 extern "C" {
@@ -16,7 +17,18 @@ static std::string EscapeJsonString(const std::string &s) {
       case '\n': out += "\\n"; break;
       case '\r': out += "\\r"; break;
       case '\t': out += "\\t"; break;
-      default:   out += c;
+      case '\b': out += "\\b"; break;
+      case '\f': out += "\\f"; break;
+      default:
+        // Escape any remaining control characters (<0x20) as \u00XX so the
+        // payload stays valid JSON for JSON.parse() on the JS side.
+        if (static_cast<unsigned char>(c) < 0x20) {
+          char buf[7];
+          std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+          out += buf;
+        } else {
+          out += c;
+        }
     }
   }
   return out;
