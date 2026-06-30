@@ -15,6 +15,9 @@
     "dist/**/*",
     "platforms.json"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:native": "make build",
     "build:ts": "tsc",
