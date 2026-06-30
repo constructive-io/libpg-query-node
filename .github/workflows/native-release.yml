@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 0.1.0)"
+        description: "Version to publish (e.g. 0.1.0 or 0.2.0-beta.0)"
         required: true
+      tag:
+        description: "npm dist-tag (blank = auto: 'latest' for releases, prerelease id for X.Y.Z-<id>.N, e.g. beta)"
+        required: false
+        default: ""
       dry-run:
         description: "Dry run (skip npm publish)"
         type: boolean
@@ -59,6 +63,34 @@ jobs:
           node scripts/sync-optional-deps.mjs
           echo "Version set to ${{ inputs.version }}"
 
+      - name: Determine npm dist-tag
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            case "$VERSION" in
+              *-*)
+                # prerelease: use the leading alpha id after '-' (0.2.0-beta.1 -> beta)
+                rest=${VERSION#*-}
+                id=${rest%%[!A-Za-z]*}
+                TAG=${id:-beta}
+                ;;
+              *)
+                TAG=latest
+                ;;
+            esac
+          fi
+          # Safety: never push a prerelease onto the 'latest' tag.
+          case "$VERSION" in
+            *-*)
+              if [ "$TAG" = "latest" ]; then
+                echo "Refusing to publish prerelease $VERSION to 'latest'"; exit 1
+              fi
+              ;;
+          esac
+          echo "NPM_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Publishing with dist-tag: $TAG"
+
       - name: Install dependencies
         working-directory: native
         run: npm install
@@ -78,9 +110,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for pkg_dir in packages/*/; do
-            echo "Publishing $(basename $pkg_dir)..."
+            echo "Publishing $(basename $pkg_dir) (tag: $NPM_TAG)..."
             cd "$pkg_dir"
-            npm publish --access public
+            npm publish --access public --tag "$NPM_TAG"
             cd ../..
           done
 
@@ -89,7 +121,7 @@ jobs:
         working-directory: native
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish --access public --tag "$NPM_TAG"
 
       - name: Dry run summary
         if: ${{ inputs.dry-run }}
@@ -97,7 +129,7 @@ jobs:
         run: |
           echo "=== DRY RUN ==="
           echo ""
-          echo "Would publish version ${{ inputs.version }}:"
+          echo "Would publish version ${{ inputs.version }} with dist-tag: $NPM_TAG"
           echo ""
           echo "Platform packages:"
           for pkg_dir in packages/*/; do
