@@ -83,13 +83,27 @@ function loadNativeAddon(): NativeAddon {
 
 function isMusl(): boolean {
   if (process.platform !== "linux") return false;
+  // Prefer Node's own libc marker: `glibcVersionRuntime` is set on glibc and
+  // absent on musl. This is reliable in minimal images (distroless/scratch)
+  // that ship no `ldd` binary — shelling out there throws and would otherwise
+  // be misread as musl, selecting the wrong platform package.
   try {
-    const { execSync } = require("child_process");
-    const ldd = execSync("ldd --version 2>&1", { encoding: "utf8" });
-    return ldd.includes("musl");
+    const report = process.report?.getReport?.() as
+      | { header?: { glibcVersionRuntime?: string } }
+      | undefined;
+    if (report?.header != null) {
+      return report.header.glibcVersionRuntime == null;
+    }
   } catch {
-    // ldd --version exits non-zero on musl
-    return true;
+    // fall through to the filesystem probe
+  }
+  // Fallback (older runtimes without process.report): look for the musl
+  // dynamic loader on disk. Default to glibc — the common case — when unsure.
+  try {
+    const fs = require("fs");
+    return fs.readdirSync("/lib").some((f: string) => f.startsWith("ld-musl-"));
+  } catch {
+    return false;
   }
 }
 
