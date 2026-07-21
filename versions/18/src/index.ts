@@ -254,7 +254,8 @@ export const parsePlPgSQL = awaitInit(async (query: string): Promise<ParseResult
     resultPtr = wasmModule._wasm_parse_plpgsql(queryPtr);
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+    // Success is always a JSON object; anything else is an error message
+    if (!resultStr.startsWith('{')) {
       throw new Error(resultStr);
     }
     
@@ -384,7 +385,8 @@ export function parsePlPgSQLSync(query: string): ParseResult {
     resultPtr = wasmModule._wasm_parse_plpgsql(queryPtr);
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+    // Success is always a JSON object; anything else is an error message
+    if (!resultStr.startsWith('{')) {
       throw new Error(resultStr);
     }
     
