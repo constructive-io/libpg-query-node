@@ -36,24 +36,13 @@ jobs:
       - name: Install Dependencies 🧶
         run: pnpm install
 
-      - name: Build WASM (PG17) 🏗
+      - name: Build WASM 🏗
         run: pnpm run build
-        working-directory: full/17
+        working-directory: versions/18
 
-      - name: Build WASM (PG18) 🏗
-        run: pnpm run build
-        working-directory: full/18
-
-      - name: Archive PG17 artifacts 🏛
+      - name: Archive production artifacts 🏛
         uses: actions/upload-artifact@v4
         with:
-          name: wasm-artifacts-pg17
-          path: full/17/wasm/
-          retention-days: 7
-
-      - name: Archive PG18 artifacts 🏛
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-artifacts-pg18
-          path: full/18/wasm/
+          name: wasm-artifacts
+          path: versions/18/wasm/
           retention-days: 7

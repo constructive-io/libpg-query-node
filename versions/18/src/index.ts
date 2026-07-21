@@ -5,34 +5,36 @@
  * npm run copy:templates
  */
 
+import { ParseResult } from "@pgsql/types";
 export * from "@pgsql/types";
 
-// @ts-ignore
-import PgQueryModule from './libpg-query.js';
-
-let wasmModule: any;
-
-// SQL error details interface
-export interface SqlErrorDetails {
-  message: string;
-  cursorPosition: number;  // 0-based position in the query
-  fileName?: string;       // Source file where error occurred (e.g., 'scan.l', 'gram.y')
-  functionName?: string;   // Internal function name
-  lineNumber?: number;     // Line number in source file
-  context?: string;        // Additional context
+export interface ScanToken {
+  start: number;
+  end: number;
+  text: string;
+  tokenType: number;
+  tokenName: string;
+  keywordKind: number;
+  keywordName: string;
 }
 
-// Options for formatting SQL errors
-export interface SqlErrorFormatOptions {
-  showPosition?: boolean;  // Show the error position marker (default: true)
-  showQuery?: boolean;     // Show the query text (default: true)
-  color?: boolean;         // Use ANSI colors (default: false)
-  maxQueryLength?: number; // Max query length to display (default: no limit)
+export interface ScanResult {
+  version: number;
+  tokens: ScanToken[];
+}
+
+export interface SqlErrorDetails {
+  message: string;
+  cursorPosition: number;
+  fileName?: string;
+  functionName?: string;
+  lineNumber?: number;
+  context?: string;
 }
 
 export class SqlError extends Error {
   sqlDetails?: SqlErrorDetails;
-
+  
   constructor(message: string, details?: SqlErrorDetails) {
     super(message);
     this.name = 'SqlError';
@@ -40,21 +42,19 @@ export class SqlError extends Error {
   }
 }
 
-
-
-// Helper function to classify error source
-function getErrorSource(filename: string | null): string {
-  if (!filename) return 'unknown';
-  if (filename === 'scan.l') return 'lexer';      // Lexical analysis errors
-  if (filename === 'gram.y') return 'parser';     // Grammar/parsing errors  
-  return filename;
+export function hasSqlDetails(error: unknown): error is SqlError {
+  return error instanceof SqlError && error.sqlDetails !== undefined;
 }
 
-// Format SQL error with visual position indicator
 export function formatSqlError(
-  error: Error & { sqlDetails?: SqlErrorDetails },
+  error: SqlError,
   query: string,
-  options: SqlErrorFormatOptions = {}
+  options: {
+    showPosition?: boolean;
+    showQuery?: boolean;
+    color?: boolean;
+    maxQueryLength?: number;
+  } = {}
 ): string {
   const {
     showPosition = true,
@@ -64,23 +64,23 @@ export function formatSqlError(
   } = options;
 
   const lines: string[] = [];
-  
+
   // ANSI color codes
   const red = color ? '\x1b[31m' : '';
   const yellow = color ? '\x1b[33m' : '';
   const reset = color ? '\x1b[0m' : '';
-  
+
   // Add error message
   lines.push(`${red}Error: ${error.message}${reset}`);
-  
+
   // Add SQL details if available
   if (error.sqlDetails) {
     const { cursorPosition, fileName, functionName, lineNumber } = error.sqlDetails;
-    
+
     if (cursorPosition !== undefined && cursorPosition >= 0) {
       lines.push(`Position: ${cursorPosition}`);
     }
-    
+
     if (fileName || functionName || lineNumber) {
       const details = [];
       if (fileName) details.push(`file: ${fileName}`);
@@ -88,26 +88,25 @@ export function formatSqlError(
       if (lineNumber) details.push(`line: ${lineNumber}`);
       lines.push(`Source: ${details.join(', ')}`);
     }
-    
+
     // Show query with position marker
     if (showQuery && showPosition && cursorPosition !== undefined && cursorPosition >= 0) {
       let displayQuery = query;
-      
+      let adjustedPosition = cursorPosition;
+
       // Truncate if needed
       if (maxQueryLength && query.length > maxQueryLength) {
         const start = Math.max(0, cursorPosition - Math.floor(maxQueryLength / 2));
         const end = Math.min(query.length, start + maxQueryLength);
-        displayQuery = (start > 0 ? '...' : '') + 
-                      query.substring(start, end) + 
+        displayQuery = (start > 0 ? '...' : '') +
+                      query.substring(start, end) +
                       (end < query.length ? '...' : '');
         // Adjust cursor position for truncation
-        const adjustedPosition = cursorPosition - start + (start > 0 ? 3 : 0);
-        lines.push(displayQuery);
-        lines.push(' '.repeat(adjustedPosition) + `${yellow}^${reset}`);
-      } else {
-        lines.push(displayQuery);
-        lines.push(' '.repeat(cursorPosition) + `${yellow}^${reset}`);
+        adjustedPosition = cursorPosition - start + (start > 0 ? 3 : 0);
       }
+
+      lines.push(displayQuery);
+      lines.push(' '.repeat(adjustedPosition) + `${yellow}^${reset}`);
     }
   } else if (showQuery) {
     // No SQL details, just show the query if requested
@@ -117,21 +116,33 @@ export function formatSqlError(
     }
     lines.push(`Query: ${displayQuery}`);
   }
-  
+
   return lines.join('\n');
 }
 
-// Check if an error has SQL details
-export function hasSqlDetails(error: any): error is Error & { sqlDetails: SqlErrorDetails } {
-  return error instanceof Error && 
-         'sqlDetails' in error &&
-         typeof (error as any).sqlDetails === 'object' && 
-         (error as any).sqlDetails !== null &&
-         'message' in (error as any).sqlDetails &&
-         'cursorPosition' in (error as any).sqlDetails;
+// @ts-ignore
+import PgQueryModule from './libpg-query.js';
+
+interface WasmModule {
+  _malloc: (size: number) => number;
+  _free: (ptr: number) => void;
+  _wasm_free_string: (ptr: number) => void;
+  _wasm_parse_query: (queryPtr: number) => number;
+  _wasm_parse_query_raw: (queryPtr: number) => number;
+  _wasm_free_parse_result: (ptr: number) => void;
+  _wasm_parse_plpgsql: (queryPtr: number) => number;
+  _wasm_fingerprint: (queryPtr: number) => number;
+  _wasm_normalize_query: (queryPtr: number) => number;
+  _wasm_scan: (queryPtr: number) => number;
+  lengthBytesUTF8: (str: string) => number;
+  stringToUTF8: (str: string, ptr: number, len: number) => void;
+  UTF8ToString: (ptr: number) => string;
+  getValue: (ptr: number, type: string) => number;
 }
 
-const initPromise = PgQueryModule().then((module: any) => {
+let wasmModule: WasmModule;
+
+const initPromise = PgQueryModule().then((module: WasmModule) => {
   wasmModule = module;
 });
 
@@ -139,13 +150,13 @@ function ensureLoaded() {
   if (!wasmModule) throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 
-export async function loadModule() {
+export async function loadModule(): Promise<void> {
   if (!wasmModule) {
     await initPromise;
   }
 }
 
-function awaitInit<T extends (...args: any[]) => any>(fn: T): T {
+function awaitInit<T extends (...args: any[]) => Promise<any>>(fn: T): T {
   return (async (...args: Parameters<T>) => {
     await initPromise;
     return fn(...args);
@@ -176,68 +187,58 @@ function ptrToString(ptr: number): string {
   return wasmModule.UTF8ToString(ptr);
 }
 
-export const parse = awaitInit(async (query: string) => {
-  // Pre-validation
+export const parse = awaitInit(async (query: string): Promise<ParseResult> => {
+  // Input validation
   if (query === null || query === undefined) {
     throw new Error('Query cannot be null or undefined');
   }
-  if (typeof query !== 'string') {
-    throw new Error(`Query must be a string, got ${typeof query}`);
-  }
-  if (query.trim() === '') {
+  
+  if (query === '') {
     throw new Error('Query cannot be empty');
   }
-  
+
   const queryPtr = stringToPtr(query);
   let resultPtr = 0;
   
   try {
-    // Call the raw function that returns a struct pointer
     resultPtr = wasmModule._wasm_parse_query_raw(queryPtr);
     if (!resultPtr) {
-      throw new Error('Failed to allocate memory for parse result');
+      throw new Error('Failed to parse query: memory allocation failed');
     }
     
-    // Read the PgQueryParseResult struct fields
-    // struct { char* parse_tree; char* stderr_buffer; PgQueryError* error; }
-    const parseTreePtr = wasmModule.getValue(resultPtr, 'i32');      // offset 0
-    const stderrBufferPtr = wasmModule.getValue(resultPtr + 4, 'i32'); // offset 4
-    const errorPtr = wasmModule.getValue(resultPtr + 8, 'i32');        // offset 8
+    // Read the PgQueryParseResult struct
+    const parseTreePtr = wasmModule.getValue(resultPtr, 'i32');
+    const stderrBufferPtr = wasmModule.getValue(resultPtr + 4, 'i32');
+    const errorPtr = wasmModule.getValue(resultPtr + 8, 'i32');
     
-    // Check for error
     if (errorPtr) {
-      // Read PgQueryError struct fields
-      // struct { char* message; char* funcname; char* filename; int lineno; int cursorpos; char* context; }
-      const messagePtr = wasmModule.getValue(errorPtr, 'i32');           // offset 0
-      const funcnamePtr = wasmModule.getValue(errorPtr + 4, 'i32');      // offset 4
-      const filenamePtr = wasmModule.getValue(errorPtr + 8, 'i32');      // offset 8
-      const lineno = wasmModule.getValue(errorPtr + 12, 'i32');          // offset 12
-      const cursorpos = wasmModule.getValue(errorPtr + 16, 'i32');       // offset 16
-      const contextPtr = wasmModule.getValue(errorPtr + 20, 'i32');      // offset 20
+      // Read PgQueryError struct
+      const messagePtr = wasmModule.getValue(errorPtr, 'i32');
+      const funcnamePtr = wasmModule.getValue(errorPtr + 4, 'i32');
+      const filenamePtr = wasmModule.getValue(errorPtr + 8, 'i32');
+      const lineno = wasmModule.getValue(errorPtr + 12, 'i32');
+      const cursorpos = wasmModule.getValue(errorPtr + 16, 'i32');
       
       const message = messagePtr ? wasmModule.UTF8ToString(messagePtr) : 'Unknown error';
-      const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : null;
+      const funcname = funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined;
+      const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : undefined;
       
-      const errorDetails: SqlErrorDetails = {
-        message: message,
+      throw new SqlError(message, {
+        message,
         cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0, // Convert to 0-based
-        fileName: filename || undefined,
-        functionName: funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined,
-        lineNumber: lineno > 0 ? lineno : undefined,
-        context: contextPtr ? wasmModule.UTF8ToString(contextPtr) : undefined
-      };
-      
-      throw new SqlError(message, errorDetails);
+        fileName: filename,
+        functionName: funcname,
+        lineNumber: lineno > 0 ? lineno : undefined
+      });
     }
     
     if (!parseTreePtr) {
-      throw new Error('Parse result is null');
+      throw new Error('No parse tree generated');
     }
     
-    const parseTree = wasmModule.UTF8ToString(parseTreePtr);
-    return JSON.parse(parseTree);
-  }
-  finally {
+    const parseTreeStr = wasmModule.UTF8ToString(parseTreePtr);
+    return JSON.parse(parseTreeStr);
+  } finally {
     wasmModule._free(queryPtr);
     if (resultPtr) {
       wasmModule._wasm_free_parse_result(resultPtr);
@@ -245,71 +246,246 @@ export const parse = awaitInit(async (query: string) => {
   }
 });
 
-export function parseSync(query: string) {
-  // Pre-validation
-  if (query === null || query === undefined) {
-    throw new Error('Query cannot be null or undefined');
-  }
-  if (typeof query !== 'string') {
-    throw new Error(`Query must be a string, got ${typeof query}`);
-  }
-  if (query.trim() === '') {
-    throw new Error('Query cannot be empty');
-  }
-  
+export const parsePlPgSQL = awaitInit(async (query: string): Promise<ParseResult> => {
   const queryPtr = stringToPtr(query);
   let resultPtr = 0;
   
   try {
-    // Call the raw function that returns a struct pointer
-    resultPtr = wasmModule._wasm_parse_query_raw(queryPtr);
-    if (!resultPtr) {
-      throw new Error('Failed to allocate memory for parse result');
+    resultPtr = wasmModule._wasm_parse_plpgsql(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
     }
     
-    // Read the PgQueryParseResult struct fields
-    // struct { char* parse_tree; char* stderr_buffer; PgQueryError* error; }
-    const parseTreePtr = wasmModule.getValue(resultPtr, 'i32');      // offset 0
-    const stderrBufferPtr = wasmModule.getValue(resultPtr + 4, 'i32'); // offset 4
-    const errorPtr = wasmModule.getValue(resultPtr + 8, 'i32');        // offset 8
+    return JSON.parse(resultStr);
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+});
+
+export const fingerprint = awaitInit(async (query: string): Promise<string> => {
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_fingerprint(queryPtr);
+    const resultStr = ptrToString(resultPtr);
     
-    // Check for error
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+});
+
+export const normalize = awaitInit(async (query: string): Promise<string> => {
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_normalize_query(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+});
+
+// Sync versions
+export function parseSync(query: string): ParseResult {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  
+  // Input validation
+  if (query === null || query === undefined) {
+    throw new Error('Query cannot be null or undefined');
+  }
+  
+  if (query === '') {
+    throw new Error('Query cannot be empty');
+  }
+
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_parse_query_raw(queryPtr);
+    if (!resultPtr) {
+      throw new Error('Failed to parse query: memory allocation failed');
+    }
+    
+    // Read the PgQueryParseResult struct
+    const parseTreePtr = wasmModule.getValue(resultPtr, 'i32');
+    const stderrBufferPtr = wasmModule.getValue(resultPtr + 4, 'i32');
+    const errorPtr = wasmModule.getValue(resultPtr + 8, 'i32');
+    
     if (errorPtr) {
-      // Read PgQueryError struct fields
-      // struct { char* message; char* funcname; char* filename; int lineno; int cursorpos; char* context; }
-      const messagePtr = wasmModule.getValue(errorPtr, 'i32');           // offset 0
-      const funcnamePtr = wasmModule.getValue(errorPtr + 4, 'i32');      // offset 4
-      const filenamePtr = wasmModule.getValue(errorPtr + 8, 'i32');      // offset 8
-      const lineno = wasmModule.getValue(errorPtr + 12, 'i32');          // offset 12
-      const cursorpos = wasmModule.getValue(errorPtr + 16, 'i32');       // offset 16
-      const contextPtr = wasmModule.getValue(errorPtr + 20, 'i32');      // offset 20
+      // Read PgQueryError struct
+      const messagePtr = wasmModule.getValue(errorPtr, 'i32');
+      const funcnamePtr = wasmModule.getValue(errorPtr + 4, 'i32');
+      const filenamePtr = wasmModule.getValue(errorPtr + 8, 'i32');
+      const lineno = wasmModule.getValue(errorPtr + 12, 'i32');
+      const cursorpos = wasmModule.getValue(errorPtr + 16, 'i32');
       
       const message = messagePtr ? wasmModule.UTF8ToString(messagePtr) : 'Unknown error';
-      const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : null;
+      const funcname = funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined;
+      const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : undefined;
       
-      const errorDetails: SqlErrorDetails = {
-        message: message,
+      throw new SqlError(message, {
+        message,
         cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0, // Convert to 0-based
-        fileName: filename || undefined,
-        functionName: funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined,
-        lineNumber: lineno > 0 ? lineno : undefined,
-        context: contextPtr ? wasmModule.UTF8ToString(contextPtr) : undefined
-      };
-      
-      throw new SqlError(message, errorDetails);
+        fileName: filename,
+        functionName: funcname,
+        lineNumber: lineno > 0 ? lineno : undefined
+      });
     }
     
     if (!parseTreePtr) {
-      throw new Error('Parse result is null');
+      throw new Error('No parse tree generated');
     }
     
-    const parseTree = wasmModule.UTF8ToString(parseTreePtr);
-    return JSON.parse(parseTree);
-  }
-  finally {
+    const parseTreeStr = wasmModule.UTF8ToString(parseTreePtr);
+    return JSON.parse(parseTreeStr);
+  } finally {
     wasmModule._free(queryPtr);
     if (resultPtr) {
       wasmModule._wasm_free_parse_result(resultPtr);
     }
   }
 }
+
+export function parsePlPgSQLSync(query: string): ParseResult {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_parse_plpgsql(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return JSON.parse(resultStr);
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+}
+
+export function fingerprintSync(query: string): string {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_fingerprint(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+}
+
+export function normalizeSync(query: string): string {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_normalize_query(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+}
+
+export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_scan(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return JSON.parse(resultStr);
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+});
+
+export function scanSync(query: string): ScanResult {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  const queryPtr = stringToPtr(query);
+  let resultPtr = 0;
+  
+  try {
+    resultPtr = wasmModule._wasm_scan(queryPtr);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return JSON.parse(resultStr);
+  } finally {
+    wasmModule._free(queryPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
+    }
+  }
+} 

@@ -10,7 +10,6 @@ pnpm run publish:versions
 This interactive script will:
 - Check for uncommitted changes (will error if any exist)
 - Let you select which versions to publish (or all)
-- Also includes the full package versions (@libpg-query/parser, full/17 and full/18)
 - Ask for version bump type (patch or minor only)
 - Ask if you want to skip the build step (useful if already built)
 - Always run tests (even if build is skipped)
@@ -163,39 +162,16 @@ npm install libpg-query@pg16   # PostgreSQL 16 specific
 npm install libpg-query        # Latest/default version
 ```
 
-## Full Package (@libpg-query/parser)
+## Full API on PG 18+
 
-The full package is versioned per PostgreSQL major version, mirroring `versions/`:
-- `full/17` — built from `17-constructive`, published as `@libpg-query/parser` with tag `pg17`
-- `full/18` — built from `18-constructive`, published as `@libpg-query/parser` with tag `pg18`
+The former `full/` package (`@libpg-query/parser`) has been retired. Starting with
+PostgreSQL 18, the regular `libpg-query` package (`versions/18`) ships the full API:
+`parse`, `parsePlPgSQL`, `scan`, `fingerprint`, `normalize` + sync variants.
+Versions 13–17 remain slim (parse only).
 
-### Quick Publish (per version)
 ```bash
-cd full/17   # or full/18
-pnpm version patch
-git add . && git commit -m "release: bump @libpg-query/parser version"
-pnpm build
-pnpm test
-pnpm run publish:pkg
-```
-
-`publish:pkg` uses `x-publish.publishName` (`@libpg-query/parser`) and `x-publish.distTag`
-(`pg17` / `pg18`) from each package.json, temporarily renaming the package during publish.
-
-### Promote to latest (optional)
-```bash
-npm dist-tag add @libpg-query/parser@pg17 latest
-```
-
-### What it does
-- Publishes `@libpg-query/parser` with tag `pg17` (from `full/17`) or `pg18` (from `full/18`)
-- Includes full parser with all features (parse, parsePlPgSQL, scan, fingerprint, normalize + sync variants)
-
-### Install published package
-```bash
-npm install @libpg-query/parser@pg18   # PostgreSQL 18 specific
-npm install @libpg-query/parser@pg17   # PostgreSQL 17 specific
-npm install @libpg-query/parser        # Latest version
+npm install libpg-query@pg18   # full API
+npm install libpg-query@pg17   # parse only
 ```
 
 ## Parser Package (@pgsql/parser)

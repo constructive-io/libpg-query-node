@@ -13,7 +13,8 @@
     "publishName": "libpg-query",
     "pgVersion": "18",
     "distTag": "pg18",
-    "libpgQueryTag": "18.0.0"
+    "libpgQueryTag": "18-constructive",
+    "fullApi": true
   },
   "files": [
     "wasm/*"
@@ -28,7 +29,7 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/errors.test.js"
+    "test": "node --test test/parsing.test.js test/pg18.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js"
   },
   "author": "Constructive <developers@constructive.io>",
   "license": "MIT",

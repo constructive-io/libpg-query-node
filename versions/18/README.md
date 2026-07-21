@@ -54,7 +54,9 @@ const result = await parse('SELECT * FROM users WHERE active = true');
 
 ## Versions
 
-Our latest is built with the `18-latest` branch from libpg_query
+Our latest is built with the `18-constructive` branch of [constructive-io/libpg_query](https://github.com/constructive-io/libpg_query)
+
+Starting with PostgreSQL 18, this package ships the **full API**: `parse`, `parsePlPgSQL`, `scan`, `fingerprint`, `normalize` and their sync variants. Versions 13–17 are parse-only.
 
 | PG Major Version | libpg_query | npm dist-tag 
 |--------------------------|-------------|---------|
@@ -89,7 +91,56 @@ const result = parseSync('SELECT * FROM users WHERE active = true');
 // Returns: ParseResult - parsed query object
 ```
 
-⚠ **Note:** If you need additional functionality like `fingerprint`, `scan`, `deparse`, or `normalize`, check out the full package (`@libpg-query/parser`) in the [./full](https://github.com/constructive-io/libpg-query-node/tree/main/full) folder of the repo.
+### `parsePlPgSQL(funcsSql: string): Promise<ParseResult>` / `parsePlPgSQLSync`
+
+Parses the contents of a PL/pgSQL function from a `CREATE FUNCTION` declaration.
+
+```typescript
+import { parsePlPgSQL } from 'libpg-query';
+
+const result = await parsePlPgSQL(`
+CREATE FUNCTION get_count() RETURNS integer AS $$
+BEGIN
+    RETURN (SELECT COUNT(*) FROM users);
+END;
+$$ LANGUAGE plpgsql;
+`);
+// { plpgsql_funcs: [...] }
+```
+
+### `scan(sql: string): Promise<ScanResult>` / `scanSync`
+
+Tokenizes the SQL, returning token positions, text, types, and keyword kinds. See [SCAN.md](./SCAN.md).
+
+```typescript
+import { scan } from 'libpg-query';
+
+const result = await scan('SELECT id FROM users');
+// { version: 180004, tokens: [{ start, end, text, tokenType, tokenName, keywordKind, keywordName }, ...] }
+```
+
+### `fingerprint(sql: string): Promise<string>` / `fingerprintSync`
+
+Generates a unique fingerprint for query identification/caching (equivalent queries share a fingerprint).
+
+```typescript
+import { fingerprint } from 'libpg-query';
+
+await fingerprint('SELECT * FROM users WHERE id = 1'); // e.g. 'a0ead580058af585'
+```
+
+### `normalize(sql: string): Promise<string>` / `normalizeSync`
+
+Normalizes the SQL, replacing constants with placeholders.
+
+```typescript
+import { normalize } from 'libpg-query';
+
+await normalize("SELECT * FROM users WHERE name = 'alice'");
+// SELECT * FROM users WHERE name = $1
+```
+
+⚠ **Note:** the full API (`parsePlPgSQL`, `scan`, `fingerprint`, `normalize`) is available on `pg18`+ only; `pg13`–`pg17` builds expose `parse`/`parseSync` only.
 
 ### Initialization
 

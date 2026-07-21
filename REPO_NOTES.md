@@ -2,6 +2,14 @@
 
 There is a templates/ dir to solve some of this.
 
+Versions with `x-publish.fullApi: true` (currently 18) are generated from the
+full-API templates in `templates/full/` and export the full API
+(parse, parsePlPgSQL, scan, fingerprint, normalize + sync variants);
+the other versions use the slim (parse-only) templates.
+⚠️ Note: the Makefiles for 15/17/18 have been hand-edited to point at
+constructive-io/libpg_query branches; `copy:templates` regenerates Makefiles
+with the pganalyze repo URL, so re-apply the repo override if you regenerate.
+
 ## Code Duplication 📋
 
 ### 1. Identical Test Files
