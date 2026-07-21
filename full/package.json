@@ -10,8 +10,7 @@
     "access": "public"
   },
   "files": [
-    "wasm/*",
-    "proto.js"
+    "wasm/*"
   ],
   "scripts": {
     "clean": "pnpm wasm:clean && rimraf cjs esm",
@@ -22,9 +21,8 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/deparsing.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js",
-    "yamlize": "node ./scripts/yamlize.js",
-    "protogen": "node ./scripts/protogen.js"
+    "test": "node --test test/parsing.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js",
+    "yamlize": "node ./scripts/yamlize.js"
   },
   "author": "Constructive <developers@constructive.io>",
   "license": "MIT",
@@ -33,12 +31,10 @@
     "url": "git://github.com/constructive-io/libpg-query-node.git"
   },
   "devDependencies": {
-    "@launchql/proto-cli": "1.25.0",
     "@yamlize/cli": "^0.8.0"
   },
   "dependencies": {
-    "@pgsql/types": "^17.6.0",
-    "@launchql/protobufjs": "7.2.6"
+    "@pgsql/types": "^17.6.2"
   },
   "keywords": [
     "sql",
