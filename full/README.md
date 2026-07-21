@@ -95,6 +95,30 @@ import { parsePlPgSQLSync } from '@libpg-query/parser';
 const result = parsePlPgSQLSync(functionSql);
 ```
 
+### `deparse(parseTree: ParseResult): Promise<string>`
+
+Converts a parse tree back to SQL string. Returns a Promise for the SQL string.
+
+```typescript
+import { parse, deparse } from '@libpg-query/parser';
+
+const parseTree = await parse('SELECT * FROM users WHERE active = true');
+const sql = await deparse(parseTree);
+// Returns: string - reconstructed SQL query
+```
+
+### `deparseSync(parseTree: ParseResult): string`
+
+Synchronous version that converts a parse tree back to SQL string directly.
+
+```typescript
+import { parseSync, deparseSync } from '@libpg-query/parser';
+
+const parseTree = parseSync('SELECT * FROM users WHERE active = true');
+const sql = deparseSync(parseTree);
+// Returns: string - reconstructed SQL query
+```
+
 ### `fingerprint(sql: string): Promise<string>`
 
 Generates a unique fingerprint for a SQL query that can be used for query identification and caching. Returns a Promise for a 16-character fingerprint string.
@@ -171,10 +195,11 @@ The library provides both async and sync methods. Async methods handle initializ
 Async methods handle initialization automatically and are always safe to use:
 
 ```typescript
-import { parse, scan } from '@libpg-query/parser';
+import { parse, deparse, scan } from '@libpg-query/parser';
 
 // These handle initialization automatically
 const result = await parse('SELECT * FROM users');
+const sql = await deparse(result);
 const tokens = await scan('SELECT * FROM users');
 ```
 
@@ -300,7 +325,19 @@ pnpm run test
 
 ## Versions
 
-Built with the `18-latest` branch from libpg_query (tag `18.0.0`), based on PostgreSQL 18.
+Our latest is built with `17-latest` branch from libpg_query
+
+
+| PG Major Version | libpg_query | Branch                                                                                         | npm 
+|--------------------------|-------------|------------------------------------------------------------------------------------------------|---------|
+| 17                       | 17-latest   | [`17-latest`](https://github.com/constructive-io/libpg-query-node/tree/17-latest)                       | [`libpg-query@17.2.0`](https://www.npmjs.com/package/libpg-query/v/latest)
+| 16                       | 16-latest   | [`16-latest`](https://github.com/constructive-io/libpg-query-node/tree/16-latest)                       | [`libpg-query@16.2.0`](https://www.npmjs.com/package/libpg-query/v/16.2.0)
+| 15                       | 15-latest   | [`15-latest`](https://github.com/constructive-io/libpg-query-node/tree/15-latest)                       | [`libpg-query@15.1.0`](https://www.npmjs.com/package/libpg-query/v/15.1.0)
+| 14                       | 14-latest   | [`14-latest`](https://github.com/constructive-io/libpg-query-node/tree/14-latest)                       | [`libpg-query@14.0.0`](https://www.npmjs.com/package/libpg-query/v/14.0.0)
+| 13                       | 13-latest   | [`13-latest`](https://github.com/constructive-io/libpg-query-node/tree/13-latest)                       | [`libpg-query@13.3.1`](https://www.npmjs.com/package/libpg-query/v/13.3.1)
+| 12                       | (n/a)       |                                                                                                |
+| 11                       | (n/a)       |                                                                                                |
+| 10                       | 10-latest   |                        | `@1.3.1` ([tree](https://github.com/constructive-io/pgsql-parser/tree/39b7b1adc8914253226e286a48105785219a81ca))      |
 
 
 ## Troubleshooting

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 static int validate_input(const char* input) {
     return input != NULL && strlen(input) > 0;
@@ -65,6 +66,29 @@ void wasm_free_parse_result(PgQueryParseResult* result) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+char* wasm_deparse_protobuf(const char* protobuf_data, size_t data_len) {
+    if (!protobuf_data || data_len == 0) {
+        return safe_strdup("Invalid input: protobuf data cannot be null or empty");
+    }
+    
+    PgQueryProtobuf pbuf;
+    pbuf.data = (char*)protobuf_data;
+    pbuf.len = data_len;
+    
+    PgQueryDeparseResult result = pg_query_deparse_protobuf(pbuf);
+    
+    if (result.error) {
+        char* error_msg = safe_strdup(result.error->message);
+        pg_query_free_deparse_result(result);
+        return error_msg ? error_msg : safe_strdup("Memory allocation failed");
+    }
+    
+    char* query = safe_strdup(result.query);
+    pg_query_free_deparse_result(result);
+    return query;
+}
+
+EMSCRIPTEN_KEEPALIVE
 char* wasm_parse_plpgsql(const char* input) {
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
@@ -121,6 +145,53 @@ char* wasm_fingerprint(const char* input) {
     char* fingerprint_str = safe_strdup(result.fingerprint_str);
     pg_query_free_fingerprint_result(result);
     return fingerprint_str;
+}
+
+EMSCRIPTEN_KEEPALIVE
+char* wasm_parse_query_protobuf(const char* input, int* out_len) {
+    if (!validate_input(input)) {
+        *out_len = 0;
+        return safe_strdup("Invalid input: query cannot be null or empty");
+    }
+    
+    PgQueryProtobufParseResult result = pg_query_parse_protobuf(input);
+    
+    if (result.error) {
+        *out_len = 0;
+        char* error_msg = safe_strdup(result.error->message);
+        pg_query_free_protobuf_parse_result(result);
+        return error_msg ? error_msg : safe_strdup("Memory allocation failed");
+    }
+    
+    char* protobuf_data = safe_malloc(result.parse_tree.len);
+    if (!protobuf_data) {
+        pg_query_free_protobuf_parse_result(result);
+        *out_len = 0;
+        return NULL;
+    }
+    memcpy(protobuf_data, result.parse_tree.data, result.parse_tree.len);
+    *out_len = (int)result.parse_tree.len;
+    
+    pg_query_free_protobuf_parse_result(result);
+    return protobuf_data;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wasm_get_protobuf_len(const char* input) {
+    if (!validate_input(input)) {
+        return -1;
+    }
+    
+    PgQueryProtobufParseResult result = pg_query_parse_protobuf(input);
+    
+    if (result.error) {
+        pg_query_free_protobuf_parse_result(result);
+        return -1;
+    }
+    
+    int len = (int)result.parse_tree.len;
+    pg_query_free_protobuf_parse_result(result);
+    return len;
 }
 
 EMSCRIPTEN_KEEPALIVE

@@ -115,6 +115,8 @@ export function formatSqlError(
 
 // @ts-ignore
 import PgQueryModule from './libpg-query.js';
+// @ts-ignore
+import { pg_query } from '../proto.js';
 
 interface WasmModule {
   _malloc: (size: number) => number;
@@ -123,6 +125,7 @@ interface WasmModule {
   _wasm_parse_query: (queryPtr: number) => number;
   _wasm_parse_query_raw: (queryPtr: number) => number;
   _wasm_free_parse_result: (ptr: number) => void;
+  _wasm_deparse_protobuf: (dataPtr: number, length: number) => number;
   _wasm_parse_plpgsql: (queryPtr: number) => number;
   _wasm_fingerprint: (queryPtr: number) => number;
   _wasm_normalize_query: (queryPtr: number) => number;
@@ -131,6 +134,7 @@ interface WasmModule {
   stringToUTF8: (str: string, ptr: number, len: number) => void;
   UTF8ToString: (ptr: number) => string;
   getValue: (ptr: number, type: string) => number;
+  HEAPU8: Uint8Array;
 }
 
 let wasmModule: WasmModule;
@@ -235,6 +239,35 @@ export const parse = awaitInit(async (query: string): Promise<ParseResult> => {
     wasmModule._free(queryPtr);
     if (resultPtr) {
       wasmModule._wasm_free_parse_result(resultPtr);
+    }
+  }
+});
+
+export const deparse = awaitInit(async (parseTree: ParseResult): Promise<string> => {
+  if (!parseTree || typeof parseTree !== 'object' || !Array.isArray(parseTree.stmts) || parseTree.stmts.length === 0) {
+    throw new Error('No parseTree provided');
+  }
+
+  const msg = pg_query.ParseResult.fromObject(parseTree);
+  const data = pg_query.ParseResult.encode(msg).finish();
+  
+  const dataPtr = wasmModule._malloc(data.length);
+  let resultPtr = 0;
+  
+  try {
+    wasmModule.HEAPU8.set(data, dataPtr);
+    resultPtr = wasmModule._wasm_deparse_protobuf(dataPtr, data.length);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(dataPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
     }
   }
 });
@@ -362,6 +395,38 @@ export function parseSync(query: string): ParseResult {
     wasmModule._free(queryPtr);
     if (resultPtr) {
       wasmModule._wasm_free_parse_result(resultPtr);
+    }
+  }
+}
+
+export function deparseSync(parseTree: ParseResult): string {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  if (!parseTree || typeof parseTree !== 'object' || !Array.isArray(parseTree.stmts) || parseTree.stmts.length === 0) {
+    throw new Error('No parseTree provided');
+  }
+
+  const msg = pg_query.ParseResult.fromObject(parseTree);
+  const data = pg_query.ParseResult.encode(msg).finish();
+  
+  const dataPtr = wasmModule._malloc(data.length);
+  let resultPtr = 0;
+  
+  try {
+    wasmModule.HEAPU8.set(data, dataPtr);
+    resultPtr = wasmModule._wasm_deparse_protobuf(dataPtr, data.length);
+    const resultStr = ptrToString(resultPtr);
+    
+    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
+      throw new Error(resultStr);
+    }
+    
+    return resultStr;
+  } finally {
+    wasmModule._free(dataPtr);
+    if (resultPtr) {
+      wasmModule._wasm_free_string(resultPtr);
     }
   }
 }
