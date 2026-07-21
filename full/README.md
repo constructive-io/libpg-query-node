@@ -300,7 +300,7 @@ pnpm run test
 
 ## Versions
 
-Built with the `18-latest` branch from libpg_query (tag `18.0.0`), based on PostgreSQL 18.
+Built from the `17-constructive` branch of [constructive-io/libpg_query](https://github.com/constructive-io/libpg_query) (PostgreSQL 17, with PL/pgSQL serializer fixes).
 
 
 ## Troubleshooting

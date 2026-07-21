@@ -75,8 +75,8 @@ importers:
   full:
     dependencies:
       '@pgsql/types':
-        specifier: ^18.0.0
-        version: 18.0.0
+        specifier: ^17.6.2
+        version: 17.6.2
     devDependencies:
       '@yamlize/cli':
         specifier: ^0.8.0

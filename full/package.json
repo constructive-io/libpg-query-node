@@ -1,6 +1,6 @@
 {
   "name": "@libpg-query/parser",
-  "version": "17.6.9",
+  "version": "17.6.10",
   "description": "The real PostgreSQL query parser",
   "homepage": "https://github.com/constructive-io/libpg-query-node",
   "main": "./wasm/index.cjs",
@@ -34,7 +34,7 @@
     "@yamlize/cli": "^0.8.0"
   },
   "dependencies": {
-    "@pgsql/types": "^18.0.0"
+    "@pgsql/types": "^17.6.2"
   },
   "keywords": [
     "sql",

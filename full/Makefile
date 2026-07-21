@@ -2,9 +2,9 @@ WASM_OUT_DIR := wasm
 WASM_OUT_NAME := libpg-query
 WASM_MODULE_NAME := PgQueryModule
 # LIBPG_QUERY_REPO := https://github.com/pganalyze/libpg_query.git
-# LIBPG_QUERY_TAG := 18.0.0
+# LIBPG_QUERY_TAG := 17-6.1.0
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
-LIBPG_QUERY_TAG := 18-constructive
+LIBPG_QUERY_TAG := 17-constructive
 
 CACHE_DIR := .cache
 
