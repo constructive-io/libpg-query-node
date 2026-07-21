@@ -471,7 +471,7 @@ packages:
     dependencies:
       chalk: 4.1.0
       inquirerer: 1.9.1
-      js-yaml: 4.1.0
+      js-yaml: 4.1.1
       minimist: 1.2.8
       yamlize: 0.8.0
     dev: true
@@ -738,7 +738,7 @@ packages:
     dependencies:
       chalk: 4.1.2
       deepmerge: 4.3.1
-      js-yaml: 4.1.0
+      js-yaml: 4.1.1
       minimist: 1.2.8
     dev: true
 
@@ -778,8 +778,8 @@ packages:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
     dev: true
 
-  /js-yaml@4.1.0:
-    resolution: {integrity: sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==}
+  /js-yaml@4.1.1:
+    resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
     hasBin: true
     dependencies:
       argparse: 2.0.1
@@ -1142,7 +1142,7 @@ packages:
   /yamlize@0.8.0:
     resolution: {integrity: sha512-2sXxXTr4gZuIP1TmVmm9yJc/WirEKsqctk/gk4MzPGuochfSAY4+OxKXXqFj02HejQmEgAFRun7b0Ec6YjlE7A==}
     dependencies:
-      js-yaml: 4.1.0
+      js-yaml: 4.1.1
       mkdirp: 3.0.1
       nested-obj: 0.0.1
     dev: true
