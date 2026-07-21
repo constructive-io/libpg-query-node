@@ -29,25 +29,16 @@ async function main() {
     .filter(dir => /^\d+$/.test(dir))
     .sort((a, b) => parseInt(b) - parseInt(a)); // Sort descending
 
-  // Also check for full package
-  const fullPackagePath = path.join(__dirname, '..', 'full', 'package.json');
-  const hasFullPackage = fs.existsSync(fullPackagePath);
-
   console.log('📦 Available packages:');
   versionDirs.forEach(v => console.log(`   - PostgreSQL ${v} (versions/${v})`));
-  if (hasFullPackage) {
-    console.log(`   - Full package (./full) - PostgreSQL 17`);
-  }
   console.log();
 
   // Ask which versions to publish
   const publishAll = await question('Publish all packages? (y/N): ');
   let selectedVersions = [];
-  let includeFullPackage = false;
 
   if (publishAll.toLowerCase() === 'y') {
     selectedVersions = versionDirs;
-    includeFullPackage = hasFullPackage;
   } else {
     // Let user select versions
     for (const version of versionDirs) {
@@ -56,14 +47,9 @@ async function main() {
         selectedVersions.push(version);
       }
     }
-    
-    if (hasFullPackage) {
-      const publishFull = await question(`Publish full package (PostgreSQL 17)? (y/N): `);
-      includeFullPackage = publishFull.toLowerCase() === 'y';
-    }
   }
 
-  if (selectedVersions.length === 0 && !includeFullPackage) {
+  if (selectedVersions.length === 0) {
     console.log('\n❌ No packages selected for publishing.');
     rl.close();
     return;
@@ -78,9 +64,6 @@ async function main() {
 
   console.log(`\n📋 Will publish:`);
   selectedVersions.forEach(v => console.log(`   - PostgreSQL ${v} (${bump} bump)`));
-  if (includeFullPackage) {
-    console.log(`   - Full package (${bump} bump)`);
-  }
 
   // Ask about building
   const skipBuild = await question('\nSkip build step? (y/N): ');
@@ -141,71 +124,20 @@ async function main() {
     }
   }
 
-  // Process full package if selected
-  if (includeFullPackage) {
-    console.log(`\n📦 Publishing full package...`);
-    const fullPath = path.join(__dirname, '..', 'full');
-    
-    try {
-      // Version bump
-      console.log(`   📝 Bumping version (${bump})...`);
-      execSync(`pnpm version ${bump}`, { cwd: fullPath, stdio: 'inherit' });
-      
-      // Commit
-      console.log(`   💾 Committing version bump...`);
-      execSync(`git add package.json`, { cwd: fullPath });
-      execSync(`git commit -m "release: bump @libpg-query/parser version"`, { stdio: 'inherit' });
-      
-      // Build (if not skipped)
-      if (shouldBuild) {
-        console.log(`   🔨 Building...`);
-        execSync('pnpm build', { cwd: fullPath, stdio: 'inherit' });
-      } else {
-        console.log(`   ⏭️  Skipping build step`);
-      }
-      
-      // Test (always run)
-      console.log(`   🧪 Running tests...`);
-      execSync('pnpm test', { cwd: fullPath, stdio: 'inherit' });
-      
-      // Publish with pg17 tag
-      console.log(`   📤 Publishing to npm with pg17 tag...`);
-      // use npm so staged changes are OK
-      execSync('npm publish --tag pg17', { cwd: fullPath, stdio: 'inherit' });
-      
-      console.log(`   ✅ Full package published successfully with pg17 tag!`);
-    } catch (error) {
-      console.error(`   ❌ Failed to publish full package:`, error.message);
-    }
-  }
-
   // Ask about promoting to latest
-  if (selectedVersions.includes('17') || includeFullPackage) {
+  if (selectedVersions.includes('17')) {
     console.log('\n🏷️  Tag Management');
     
-    if (selectedVersions.includes('17')) {
-      const promoteVersions = await question('Promote libpg-query@pg17 to latest? (y/N): ');
-      if (promoteVersions.toLowerCase() === 'y') {
-        try {
-          execSync('npm dist-tag add libpg-query@pg17 latest', { stdio: 'inherit' });
-          console.log('✅ libpg-query@pg17 promoted to latest');
-        } catch (error) {
-          console.error('❌ Failed to promote tag:', error.message);
-        }
+    const promoteVersions = await question('Promote libpg-query@pg17 to latest? (y/N): ');
+    if (promoteVersions.toLowerCase() === 'y') {
+      try {
+        execSync('npm dist-tag add libpg-query@pg17 latest', { stdio: 'inherit' });
+        console.log('✅ libpg-query@pg17 promoted to latest');
+      } catch (error) {
+        console.error('❌ Failed to promote tag:', error.message);
       }
     }
-    
-    if (includeFullPackage) {
-      const promoteFullPackage = await question('Promote @libpg-query/parser@pg17 to latest? (y/N): ');
-      if (promoteFullPackage.toLowerCase() === 'y') {
-        try {
-          execSync('npm dist-tag add @libpg-query/parser@pg17 latest', { stdio: 'inherit' });
-          console.log('✅ @libpg-query/parser@pg17 promoted to latest');
-        } catch (error) {
-          console.error('❌ Failed to promote tag:', error.message);
-        }
-      }
-    }
+
   }
 
   console.log('\n✨ Publishing complete!');

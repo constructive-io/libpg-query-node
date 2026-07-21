@@ -13,7 +13,6 @@ jobs:
     strategy:
       matrix:
         package: 
-          - { name: 'full', path: 'full', version: '18' }
           - { name: 'v13', path: 'versions/13', version: '13' }
           - { name: 'v14', path: 'versions/14', version: '14' }
           - { name: 'v15', path: 'versions/15', version: '15' }
@@ -78,7 +77,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         package: 
-          - { name: 'full', path: 'full', version: '18' }
           - { name: 'v13', path: 'versions/13', version: '13' }
           - { name: 'v14', path: 'versions/14', version: '14' }
           - { name: 'v15', path: 'versions/15', version: '15' }

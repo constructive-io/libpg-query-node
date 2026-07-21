@@ -74,9 +74,7 @@ function analyzePackage(packagePath, packageName) {
 // Get all version packages dynamically
 function getVersionPackages() {
   const versionsDir = './versions';
-  const packages = [
-    { path: './full', name: 'full (Full)', version: 'original' }
-  ];
+  const packages = [];
 
   if (fs.existsSync(versionsDir)) {
     const versions = fs.readdirSync(versionsDir)

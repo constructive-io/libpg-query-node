@@ -73,11 +73,10 @@ This repository contains multiple packages to support different PostgreSQL versi
 
 | Package | Description | PostgreSQL Versions | npm Package |
 |---------|-------------|---------------------|-------------|
-| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | Lightweight parser (parse only) | 13, 14, 15, 16, 17, 18 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
+| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | PostgreSQL parser (full API on PG 18+, parse-only on 13–17) | 13, 14, 15, 16, 17, 18 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
 | **[@pgsql/parser](https://github.com/constructive-io/libpg-query-node/tree/main/parser)** | Multi-version parser (runtime selection) | 15, 16, 17, 18 | [`@pgsql/parser`](https://www.npmjs.com/package/@pgsql/parser) |
 | **[@pgsql/types](https://github.com/constructive-io/libpg-query-node/tree/main/types)** | TypeScript type definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/types`](https://www.npmjs.com/package/@pgsql/types) |
 | **[@pgsql/enums](https://github.com/constructive-io/libpg-query-node/tree/main/enums)** | TypeScript enum definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/enums`](https://www.npmjs.com/package/@pgsql/enums) |
-| **[@libpg-query/parser](https://github.com/constructive-io/libpg-query-node/tree/main/full)** | Full parser with all features | 17 only | [`@libpg-query/parser`](https://www.npmjs.com/package/@libpg-query/parser) |
 
 ### Version Tags
 
@@ -99,10 +98,10 @@ npm install @pgsql/enums
 
 ### Which Package Should I Use?
 
-- **Just need to parse SQL?** → Use `libpg-query` (lightweight, all PG versions)
+- **Just need to parse SQL?** → Use `libpg-query` (all PG versions)
 - **Need multiple versions at runtime?** → Use `@pgsql/parser` (dynamic version selection)
 - **Need TypeScript types?** → Add `@pgsql/types` and/or `@pgsql/enums`
-- **Need fingerprint, normalize, scan, or PL/pgSQL parsing?** → Use `@libpg-query/parser` (PG 18)
+- **Need fingerprint, normalize, scan, or PL/pgSQL parsing?** → Use `libpg-query@pg18` — the full API ships on PG 18+ (13–17 remain parse-only)
 
 
 ## API Documentation
@@ -113,7 +112,6 @@ For detailed API documentation and usage examples, see the package-specific READ
 - **@pgsql/parser** - [Multi-Version Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/parser)
 - **@pgsql/types** - [Types Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/types/18)
 - **@pgsql/enums** - [Enums Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/enums/18)
-- **@libpg-query/parser** - [Full Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/full)
 
 ## Build Instructions
 
