@@ -1,4 +1,4 @@
-# libpg-query
+# @libpg-query/parser
 
 <p align="center" width="100%">
     <img height="250" src="https://raw.githubusercontent.com/constructive-io/constructive/refs/heads/main/assets/outline-logo.svg" alt="constructive.io">
@@ -8,7 +8,7 @@
    <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/npm/dt/libpg-query"></a>
    <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/npm/dw/libpg-query"/></a>
    <a href="https://github.com/constructive-io/libpg-query/blob/main/LICENSE-MIT"><img height="20" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>
-   <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/github/package-json/v/constructive-io/libpg-query-node?filename=versions%2F18%2Fpackage.json"/></a><br />
+   <a href="https://www.npmjs.com/package/libpg-query"><img height="20" src="https://img.shields.io/github/package-json/v/constructive-io/libpg-query-node?filename=full%2F18%2Fpackage.json"/></a><br />
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml/badge.svg" /></a>
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://img.shields.io/badge/macOS-available-333333?logo=apple&logoColor=white" /></a>
    <a href="https://github.com/constructive-io/libpg-query-node/actions/workflows/ci.yml"><img height="20" src="https://img.shields.io/badge/Windows-available-333333?logo=windows&logoColor=white" /></a>
@@ -17,13 +17,13 @@
 
 # The Real PostgreSQL Parser for JavaScript
 
-### Bring the power of PostgreSQL's native parser to your TypeScript projects — no native builds, no platform headaches.
+### Bring the power of PostgreSQL’s native parser to your JavaScript projects — no native builds, no platform headaches.
 
 This is the official PostgreSQL parser, compiled to WebAssembly (WASM) for seamless, cross-platform compatibility. Use it in Node.js or the browser, on Linux, Windows, or anywhere JavaScript runs.
 
 Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), this library delivers full fidelity with the Postgres C codebase — no rewrites, no shortcuts.
 
-## Features
+### Features
 
 * 🔧 **Powered by PostgreSQL** – Uses the official Postgres C parser compiled to WebAssembly
 * 🖥️ **Cross-Platform** – Runs smoothly on macOS, Linux, and Windows
@@ -37,83 +37,209 @@ Built to power [pgsql-parser](https://github.com/constructive-io/pgsql-parser), 
 > 🎯 **Want to parse + deparse (full round trip)?**  
 > We highly recommend using [`pgsql-parser`](https://github.com/constructive-io/pgsql-parser) which leverages a pure TypeScript deparser that has been battle-tested against 23,000+ SQL statements and is built on top of libpg-query.
 
-### 🔀 Multi-Version Support with @pgsql/parser
-
-> **Need to support multiple PostgreSQL versions at runtime?**  
-> Use [`@pgsql/parser`](https://github.com/constructive-io/libpg-query-node/tree/main/parser) for dynamic version selection — parse SQL with PostgreSQL 15, 16, 17, or 18 in a single package!
-> 
-> ```typescript
-> import { parse } from '@pgsql/parser';
-> 
-> // Parse with specific PostgreSQL version
-> const result15 = await parse('SELECT * FROM users', 15);
-> const result18 = await parse('SELECT * FROM users', 18);
-> ```
-
 ## Installation
 
 ```sh
-npm install libpg-query
+npm install @libpg-query/parser
 ```
 
-## Example
+## Usage
+
+### `parse(query: string): Promise<ParseResult>`
+
+Parses the SQL and returns a Promise for the parse tree. May reject with a parse error.
 
 ```typescript
-import { parse } from 'libpg-query';
+import { parse } from '@libpg-query/parser';
 
 const result = await parse('SELECT * FROM users WHERE active = true');
-// {"version":180004,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget" ... "op":"SETOP_NONE"}}}]}
+// Returns: ParseResult - parsed query object
 ```
 
-## 📦 Packages
+### `parseSync(query: string): ParseResult`
 
-This repository contains multiple packages to support different PostgreSQL versions and use cases:
+Synchronous version that returns the parse tree directly. May throw a parse error.
 
-### Available Packages & Versions
+```typescript
+import { parseSync } from '@libpg-query/parser';
 
-| Package | Description | PostgreSQL Versions | npm Package |
-|---------|-------------|---------------------|-------------|
-| **[libpg-query](https://github.com/constructive-io/libpg-query-node/tree/main/versions)** | Lightweight parser (parse only) | 13, 14, 15, 16, 17, 18 | [`libpg-query`](https://www.npmjs.com/package/libpg-query) |
-| **[@pgsql/parser](https://github.com/constructive-io/libpg-query-node/tree/main/parser)** | Multi-version parser (runtime selection) | 15, 16, 17, 18 | [`@pgsql/parser`](https://www.npmjs.com/package/@pgsql/parser) |
-| **[@pgsql/types](https://github.com/constructive-io/libpg-query-node/tree/main/types)** | TypeScript type definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/types`](https://www.npmjs.com/package/@pgsql/types) |
-| **[@pgsql/enums](https://github.com/constructive-io/libpg-query-node/tree/main/enums)** | TypeScript enum definitions | 13, 14, 15, 16, 17, 18 | [`@pgsql/enums`](https://www.npmjs.com/package/@pgsql/enums) |
-| **[@libpg-query/parser](https://github.com/constructive-io/libpg-query-node/tree/main/full)** | Full parser with all features | 17, 18 | [`@libpg-query/parser`](https://www.npmjs.com/package/@libpg-query/parser) |
-
-### Version Tags
-
-Each versioned package uses npm dist-tags for PostgreSQL version selection:
-
-```bash
-# Install specific PostgreSQL version
-npm install libpg-query@pg18      # PostgreSQL 18 (latest)
-npm install libpg-query@pg17      # PostgreSQL 17
-npm install libpg-query@pg16      # PostgreSQL 16
-npm install @pgsql/types@pg18     # Types for PostgreSQL 18
-npm install @pgsql/enums@pg15     # Enums for PostgreSQL 15
-
-# Install latest (defaults to pg18)
-npm install libpg-query
-npm install @pgsql/types
-npm install @pgsql/enums
+const result = parseSync('SELECT * FROM users WHERE active = true');
+// Returns: ParseResult - parsed query object
 ```
 
-### Which Package Should I Use?
+### `parsePlPgSQL(funcsSql: string): Promise<ParseResult>`
 
-- **Just need to parse SQL?** → Use `libpg-query` (lightweight, all PG versions)
-- **Need multiple versions at runtime?** → Use `@pgsql/parser` (dynamic version selection)
-- **Need TypeScript types?** → Add `@pgsql/types` and/or `@pgsql/enums`
-- **Need fingerprint, normalize, scan, or PL/pgSQL parsing?** → Use `@libpg-query/parser` (PG 17 & 18 via `pg17`/`pg18` dist-tags)
+Parses the contents of a PL/pgSQL function from a `CREATE FUNCTION` declaration. Returns a Promise for the parse tree.
 
+```typescript
+import { parsePlPgSQL } from '@libpg-query/parser';
 
-## API Documentation
+const functionSql = `
+CREATE FUNCTION get_user_count() RETURNS integer AS $$
+BEGIN
+    RETURN (SELECT COUNT(*) FROM users);
+END;
+$$ LANGUAGE plpgsql;
+`;
 
-For detailed API documentation and usage examples, see the package-specific READMEs:
+const result = await parsePlPgSQL(functionSql);
+```
 
-- **libpg-query** - [Parser API Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/versions/18)
-- **@pgsql/parser** - [Multi-Version Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/parser)
-- **@pgsql/types** - [Types Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/types/18)
-- **@pgsql/enums** - [Enums Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/enums/18)
-- **@libpg-query/parser** - [Full Parser Documentation](https://github.com/constructive-io/libpg-query-node/tree/main/full)
+### `parsePlPgSQLSync(funcsSql: string): ParseResult`
+
+Synchronous version of PL/pgSQL parsing.
+
+```typescript
+import { parsePlPgSQLSync } from '@libpg-query/parser';
+
+const result = parsePlPgSQLSync(functionSql);
+```
+
+### `fingerprint(sql: string): Promise<string>`
+
+Generates a unique fingerprint for a SQL query that can be used for query identification and caching. Returns a Promise for a 16-character fingerprint string.
+
+```typescript
+import { fingerprint } from '@libpg-query/parser';
+
+const fp = await fingerprint('SELECT * FROM users WHERE active = $1');
+// Returns: string - unique 16-character fingerprint (e.g., "50fde20626009aba")
+```
+
+### `fingerprintSync(sql: string): string`
+
+Synchronous version that generates a unique fingerprint for a SQL query directly.
+
+```typescript
+import { fingerprintSync } from '@libpg-query/parser';
+
+const fp = fingerprintSync('SELECT * FROM users WHERE active = $1');
+// Returns: string - unique 16-character fingerprint
+```
+
+### `normalize(sql: string): Promise<string>`
+
+Normalizes a SQL query by removing comments, standardizing whitespace, and converting to a canonical form. Returns a Promise for the normalized SQL string.
+
+```typescript
+import { normalize } from '@libpg-query/parser';
+
+const normalized = await normalize('SELECT * FROM users WHERE active = true');
+// Returns: string - normalized SQL query
+```
+
+### `normalizeSync(sql: string): string`
+
+Synchronous version that normalizes a SQL query directly.
+
+```typescript
+import { normalizeSync } from '@libpg-query/parser';
+
+const normalized = normalizeSync('SELECT * FROM users WHERE active = true');
+// Returns: string - normalized SQL query
+```
+
+### `scan(sql: string): Promise<ScanResult>`
+
+Scans (tokenizes) a SQL query and returns detailed information about each token. Returns a Promise for a ScanResult containing all tokens with their positions, types, and classifications.
+
+```typescript
+import { scan } from '@libpg-query/parser';
+
+const result = await scan('SELECT * FROM users WHERE id = $1');
+// Returns: ScanResult - detailed tokenization information
+console.log(result.tokens[0]); // { start: 0, end: 6, text: "SELECT", tokenType: 651, tokenName: "UNKNOWN", keywordKind: 4, keywordName: "RESERVED_KEYWORD" }
+```
+
+### `scanSync(sql: string): ScanResult`
+
+Synchronous version that scans (tokenizes) a SQL query directly.
+
+```typescript
+import { scanSync } from '@libpg-query/parser';
+
+const result = scanSync('SELECT * FROM users WHERE id = $1');
+// Returns: ScanResult - detailed tokenization information
+```
+
+### Initialization
+
+The library provides both async and sync methods. Async methods handle initialization automatically, while sync methods require explicit initialization.
+
+#### Async Methods (Recommended)
+
+Async methods handle initialization automatically and are always safe to use:
+
+```typescript
+import { parse, scan } from '@libpg-query/parser';
+
+// These handle initialization automatically
+const result = await parse('SELECT * FROM users');
+const tokens = await scan('SELECT * FROM users');
+```
+
+#### Sync Methods
+
+Sync methods require explicit initialization using `loadModule()`:
+
+```typescript
+import { loadModule, parseSync, scanSync } from '@libpg-query/parser';
+
+// Initialize first
+await loadModule();
+
+// Now safe to use sync methods
+const result = parseSync('SELECT * FROM users');
+const tokens = scanSync('SELECT * FROM users');
+```
+
+### `loadModule(): Promise<void>`
+
+Explicitly initializes the WASM module. Required before using any sync methods.
+
+```typescript
+import { loadModule, parseSync, scanSync } from '@libpg-query/parser';
+
+// Initialize before using sync methods
+await loadModule();
+const result = parseSync('SELECT * FROM users');
+const tokens = scanSync('SELECT * FROM users');
+```
+
+Note: We recommend using async methods as they handle initialization automatically. Use sync methods only when necessary, and always call `loadModule()` first.
+
+### Type Definitions
+
+```typescript
+interface ParseResult {
+  version: number;
+  stmts: Statement[];
+}
+
+interface Statement {
+  stmt_type: string;
+  stmt_len: number;
+  stmt_location: number;
+  query: string;
+}
+
+interface ScanResult {
+  version: number;
+  tokens: ScanToken[];
+}
+
+interface ScanToken {
+  start: number;          // Starting position in the SQL string
+  end: number;            // Ending position in the SQL string
+  text: string;           // The actual token text
+  tokenType: number;      // Numeric token type identifier
+  tokenName: string;      // Human-readable token type name
+  keywordKind: number;    // Numeric keyword classification
+  keywordName: string;    // Human-readable keyword classification
+}
+```
+
+**Note:** The return value is an array, as multiple queries may be provided in a single string (semicolon-delimited, as PostgreSQL expects).
 
 ## Build Instructions
 
@@ -126,15 +252,12 @@ This package uses a **WASM-only build system** for true cross-platform compatibi
 
 ### Building WASM Artifacts
 
-Run these commands from inside a `versions/*` directory (e.g., `versions/17`):
-
 1. **Install dependencies:**
    ```bash
    pnpm install
    ```
 
 2. **Build WASM artifacts:**
-   
    ```bash
    pnpm run build
    ```
@@ -173,6 +296,13 @@ pnpm run test
   pnpm run clean && pnpm run build && pnpm run test
   ```
 
+
+
+## Versions
+
+Built from the `18-constructive` branch of [constructive-io/libpg_query](https://github.com/constructive-io/libpg_query) (PostgreSQL 18, with PL/pgSQL serializer fixes).
+
+
 ## Troubleshooting
 
 ### Common Issues
@@ -188,22 +318,6 @@ pnpm run test
 **Build environment issues:**
 - Ensure Emscripten SDK is properly installed and configured
 - Check that all required build dependencies are available
-
-**`.wasm` not found**
-- Usually occurs in Next.js/Webpack/Turbopack
-- see **[LOADING_WASM.md](./LOADING_WASM.md)**
-
-### Template System
-
-To avoid duplication across PostgreSQL versions, common files are maintained in the `templates/` directory:
-- `LICENSE`, `Makefile`, `src/index.ts`, `src/libpg-query.d.ts`, `src/wasm_wrapper.c`
-
-To update version-specific files from templates:
-```bash
-npm run copy:templates
-```
-
-This ensures consistency while allowing version-specific customizations (e.g., patches for version 13).
 
 ### Build Artifacts
 

@@ -42,15 +42,15 @@ jobs:
           ./emsdk install 3.1.59
           ./emsdk activate 3.1.59
           source ./emsdk_env.sh
-        working-directory: full
+        working-directory: full/18
       - name: Build with Emscripten 🏗
         run: |
           source ./emsdk/emsdk_env.sh
           emmake make
           emmake make build
-        working-directory: full
+        working-directory: full/18
       - name: Archive production artifacts 🏛
         uses: actions/upload-artifact@v4
         with:
           name: wasm-artifacts
-          path: full/wasm
+          path: full/18/wasm

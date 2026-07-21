@@ -75,7 +75,8 @@ function analyzePackage(packagePath, packageName) {
 function getVersionPackages() {
   const versionsDir = './versions';
   const packages = [
-    { path: './full', name: 'full (Full)', version: 'original' }
+    { path: './full/17', name: 'full/17 (Full)', version: 'original' },
+    { path: './full/18', name: 'full/18 (Full)', version: 'original' }
   ];
 
   if (fs.existsSync(versionsDir)) {
