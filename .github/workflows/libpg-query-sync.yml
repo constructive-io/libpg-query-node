@@ -1,0 +1,165 @@
+name: libpg_query Sync
+
+# Release track. pganalyze/libpg_query is the only input that changes what
+# consumers of @ashbyhq/libpg-query-native actually get — the C parser is 100%
+# of parsing behaviour — so it is what triggers a release.
+#
+# Opens a PR bumping the pinned tag and the package version. Native CI builds and
+# tests all five platforms on that PR. Merging it triggers Native Release.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump for the release"
+        type: choice
+        options: [minor, patch]
+        default: minor
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Check for a new libpg_query release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push the sync branch
+      pull-requests: write # open the PR
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - id: check
+        name: Compare pinned tag against pganalyze releases
+        working-directory: native
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-libpg-query-release.mjs
+
+      - name: Up to date
+        if: ${{ steps.check.outputs.changed != 'true' }}
+        env:
+          CURRENT: ${{ steps.check.outputs.current }}
+        run: echo "::notice::Already pinned at the newest release ($CURRENT). Nothing to do."
+
+      # A PR opened with GITHUB_TOKEN does not trigger other workflows (GitHub's
+      # anti-recursion rule), which would leave the sync PR with no CI at all.
+      # Prefer a PAT; fall back to GITHUB_TOKEN but say so loudly in the PR body.
+      - id: token
+        name: Select token
+        if: ${{ steps.check.outputs.changed == 'true' }}
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SYNC_PAT:-}" ]; then
+            echo "has-pat=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-pat=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SYNC_PAT is not set — the PR will open without CI checks. See native/README.md."
+          fi
+
+      - name: Prepare the bump
+        id: prep
+        if: ${{ steps.check.outputs.changed == 'true' }}
+        working-directory: native
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
+          BUMP: ${{ inputs.bump || 'minor' }}
+        run: |
+          set -euo pipefail
+
+          node --input-type=module -e "
+            import { writeMakefileVar } from './scripts/upstream.mjs';
+            writeMakefileVar('LIBPG_QUERY_TAG', process.env.LATEST);
+          "
+
+          NEW_VERSION=$(npm version "$BUMP" --no-git-tag-version | tr -d 'v')
+          node scripts/sync-upstream-metadata.mjs
+
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Bumped to $NEW_VERSION against libpg_query $LATEST"
+          git --no-pager diff --stat
+
+      - name: Open pull request
+        if: ${{ steps.check.outputs.changed == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          NEW_VERSION: ${{ steps.prep.outputs.new-version }}
+          HAS_PAT: ${{ steps.token.outputs.has-pat }}
+          BASE_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="sync/libpg-query-${LATEST}"
+
+          # Idempotence: a PR for this tag may already be open from a previous run.
+          open_count=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open_count" != "0" ]; then
+            echo "::notice::A PR for $BRANCH is already open. Nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          # `npm version` updates the lockfile's version too; stage it so the two
+          # do not drift apart over successive syncs.
+          git add native/Makefile native/package.json native/package-lock.json
+
+          cat > /tmp/commit-msg.txt <<EOF
+          native: build against libpg_query ${LATEST}
+
+          Bumps the pinned pganalyze/libpg_query release from ${CURRENT} to
+          ${LATEST}, and the package version to ${NEW_VERSION}.
+
+          Merging this publishes ${NEW_VERSION} to npm.
+          EOF
+          git commit -F /tmp/commit-msg.txt
+
+          # Force: the branch may survive a previously closed PR, and its content
+          # is fully derived from the tag, so regenerating it is always correct.
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+
+          {
+            echo "\`libpg_query\` **${CURRENT} → ${LATEST}**, releasing as \`${NEW_VERSION}\`."
+            echo ""
+            echo "The C parser is 100% of this package's parsing behaviour, so a new"
+            echo "pganalyze release is the thing that actually changes what consumers get."
+            echo ""
+            echo "- Release notes: https://github.com/pganalyze/libpg_query/releases/tag/${LATEST}"
+            echo "- Compare: https://github.com/pganalyze/libpg_query/compare/${CURRENT}...${LATEST}"
+            echo ""
+            echo "**Merging this PR publishes \`${NEW_VERSION}\` to npm.**"
+            echo ""
+            if [ "$HAS_PAT" != "true" ]; then
+              echo "> [!WARNING]"
+              echo "> Opened with \`GITHUB_TOKEN\`, so CI did **not** start automatically."
+              echo "> Close and reopen this PR to trigger it, or set a \`SYNC_PAT\` secret."
+              echo ""
+            fi
+            echo "---"
+            echo "Opened by \`libpg-query-sync.yml\`."
+          } > /tmp/pr-body.md
+
+          # `gh pr create --label` fails outright if the label does not exist.
+          gh label create "libpg-query-update" \
+            --color "1d76db" \
+            --description "Pinned libpg_query release bump" 2>/dev/null || true
+
+          gh pr create \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "native: build against libpg_query ${LATEST} (release ${NEW_VERSION})" \
+            --body-file /tmp/pr-body.md \
+            --label "libpg-query-update"

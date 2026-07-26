@@ -49,5 +49,11 @@
     "node-addon-api": "^8.3.1",
     "node-api-headers": "^1.5.0",
     "typescript": "5.9.3"
+  },
+  "x-upstream": {
+    "libpgQueryRepo": "https://github.com/pganalyze/libpg_query.git",
+    "libpgQueryTag": "18.0.0",
+    "pgMajor": "18",
+    "constructiveBaseSha": "74ed197bde234ede243e66f47a417a6017c563d2"
   }
 }
