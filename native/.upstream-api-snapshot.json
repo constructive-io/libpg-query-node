@@ -1,0 +1,14 @@
+{
+  "source": "../versions/18/src/index.ts",
+  "exports": [
+    "* from @pgsql/types",
+    "SqlError",
+    "SqlErrorDetails",
+    "SqlErrorFormatOptions",
+    "formatSqlError",
+    "hasSqlDetails",
+    "loadModule",
+    "parse",
+    "parseSync"
+  ]
+}

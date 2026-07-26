@@ -1,0 +1,291 @@
+name: Upstream Tree Sync
+
+# Hygiene track. Keeps the shared tree mergeable with
+# constructive-io/libpg-query-node and surfaces the changes that need a human.
+#
+# This NEVER bumps a version and NEVER publishes. Nothing upstream is compiled
+# into @ashbyhq/libpg-query-native — releases are driven by libpg-query-sync.yml
+# (pganalyze) instead.
+on:
+  schedule:
+    - cron: "0 7 1 * *" # 07:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPO: https://github.com/constructive-io/libpg-query-node.git
+  UPSTREAM_BRANCH: main
+
+jobs:
+  sync:
+    name: Merge upstream tree
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push the sync branch
+      pull-requests: write # open the PR
+      issues: write # report an unmergeable conflict
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # merge needs real history
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      # Fetch upstream directly rather than via a mirror branch on origin, so
+      # this cannot silently act on a stale ref.
+      - id: fetch
+        name: Fetch upstream
+        run: |
+          set -euo pipefail
+          git remote add upstream "$UPSTREAM_REPO" 2>/dev/null || \
+            git remote set-url upstream "$UPSTREAM_REPO"
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+
+          UPSTREAM_SHA=$(git rev-parse upstream/"$UPSTREAM_BRANCH")
+          BEHIND=$(git rev-list --count HEAD..upstream/"$UPSTREAM_BRANCH")
+
+          echo "sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          echo "short-sha=${UPSTREAM_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "Upstream $UPSTREAM_BRANCH is $UPSTREAM_SHA; we are $BEHIND commit(s) behind."
+
+      - name: Up to date
+        if: ${{ steps.fetch.outputs.behind == '0' }}
+        run: echo "::notice::Already up to date with upstream. Nothing to do."
+
+      - id: state
+        name: Record pre-merge C-source pin
+        if: ${{ steps.fetch.outputs.behind != '0' }}
+        run: |
+          set -euo pipefail
+          # Upstream's own C-library pin, before the merge, for later comparison.
+          before_repo=$(git show HEAD:versions/18/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' | head -1 || true)
+          before_tag=$(git show HEAD:versions/18/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' | head -1 || true)
+          echo "before-repo=${before_repo}" >> "$GITHUB_OUTPUT"
+          echo "before-tag=${before_tag}" >> "$GITHUB_OUTPUT"
+          echo "Before: ${before_repo} @ ${before_tag}"
+
+      - id: merge
+        name: Merge upstream
+        if: ${{ steps.fetch.outputs.behind != '0' }}
+        env:
+          SHORT_SHA: ${{ steps.fetch.outputs.short-sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "sync/upstream-${SHORT_SHA}"
+
+          : > /tmp/autoresolved.txt
+
+          if git merge --no-edit upstream/"$UPSTREAM_BRANCH"; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The fork deletes upstream's three WASM workflows, and upstream keeps
+          # editing them, so every sync produces "deleted by us" (DU) conflicts.
+          # Escalating those to a human each time would make this useless — the
+          # standing intent is to keep the deletion. Anything else still stops.
+          OTHER=$(git status --porcelain | grep -E '^(DD|AU|UD|UA|AA|UU)' || true)
+          DU_FILES=$(git status --porcelain | sed -n 's/^DU //p')
+
+          if [ -n "$OTHER" ] || [ -z "$DU_FILES" ]; then
+            # A real content conflict, or something we do not recognise. Do not guess.
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U > /tmp/conflicts.txt || true
+            echo "Unresolvable conflicts:"; cat /tmp/conflicts.txt
+            git merge --abort || true
+            exit 0
+          fi
+
+          printf '%s\n' "$DU_FILES" | while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            echo "Keeping our deletion of $f"
+            git rm -q --cached -- "$f" 2>/dev/null || true
+            rm -f -- "$f"
+            echo "$f" >> /tmp/autoresolved.txt
+          done
+          git commit -q --no-edit
+          echo "conflict=false" >> "$GITHUB_OUTPUT"
+
+      - name: Report conflict and stop
+        if: ${{ steps.merge.outputs.conflict == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+          SHORT_SHA: ${{ steps.fetch.outputs.short-sha }}
+          BEHIND: ${{ steps.fetch.outputs.behind }}
+        run: |
+          set -euo pipefail
+          gh label create "needs-manual-merge" --color "d93f0b" \
+            --description "Upstream sync could not merge cleanly" 2>/dev/null || true
+
+          {
+            echo "Merging upstream \`${SHORT_SHA}\` (${BEHIND} commit(s) ahead) hit conflicts."
+            echo ""
+            echo "Conflicting files:"
+            echo ""
+            while read -r f; do [ -n "$f" ] && echo "- \`$f\`"; done < /tmp/conflicts.txt
+            echo ""
+            echo "The fork's conflict surface is normally small: it modifies one upstream"
+            echo "file (\`README.md\`) and deletes three WASM workflows, so most conflicts are"
+            echo "delete/modify on \`.github/workflows/{ci,build-wasm,build-wasm-no-docker}\`"
+            echo "and are resolved by keeping the deletion."
+            echo ""
+            echo "Resolve locally:"
+            echo ""
+            echo '```'
+            echo "git fetch https://github.com/constructive-io/libpg-query-node.git main"
+            echo "git checkout -b sync/upstream-${SHORT_SHA}"
+            echo "git merge FETCH_HEAD"
+            echo '```'
+          } > /tmp/issue-body.md
+
+          gh issue create \
+            --title "Upstream sync conflict at ${SHORT_SHA}" \
+            --body-file /tmp/issue-body.md \
+            --label "needs-manual-merge"
+
+          echo "::error::Upstream merge conflicted; opened an issue."
+          exit 1
+
+      - id: drift
+        name: Check for upstream API drift
+        if: ${{ steps.merge.outputs.conflict == 'false' }}
+        working-directory: native
+        continue-on-error: true # drift is a finding to report, not a failed run
+        run: node scripts/check-api-drift.mjs
+
+      - id: csource
+        name: Check for upstream C-source drift
+        if: ${{ steps.merge.outputs.conflict == 'false' }}
+        env:
+          BEFORE_REPO: ${{ steps.state.outputs.before-repo }}
+          BEFORE_TAG: ${{ steps.state.outputs.before-tag }}
+        run: |
+          set -euo pipefail
+          after_repo=$(sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' versions/18/Makefile | head -1 || true)
+          after_tag=$(sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' versions/18/Makefile | head -1 || true)
+          echo "After: ${after_repo} @ ${after_tag}"
+
+          if [ "$after_repo" != "$BEFORE_REPO" ] || [ "$after_tag" != "$BEFORE_TAG" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "after-repo=${after_repo}" >> "$GITHUB_OUTPUT"
+          echo "after-tag=${after_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: ${{ steps.merge.outputs.conflict == 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
+          SHORT_SHA: ${{ steps.fetch.outputs.short-sha }}
+          UPSTREAM_SHA: ${{ steps.fetch.outputs.sha }}
+          BEHIND: ${{ steps.fetch.outputs.behind }}
+          BASE_BRANCH: ${{ github.ref_name }}
+          DRIFT: ${{ steps.drift.outcome }}
+          CSOURCE_CHANGED: ${{ steps.csource.outputs.changed }}
+          BEFORE_REPO: ${{ steps.state.outputs.before-repo }}
+          BEFORE_TAG: ${{ steps.state.outputs.before-tag }}
+          AFTER_REPO: ${{ steps.csource.outputs.after-repo }}
+          AFTER_TAG: ${{ steps.csource.outputs.after-tag }}
+        run: |
+          set -euo pipefail
+          BRANCH="sync/upstream-${SHORT_SHA}"
+
+          open_count=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open_count" != "0" ]; then
+            echo "::notice::A PR for $BRANCH is already open. Nothing to do."
+            exit 0
+          fi
+
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+
+          {
+            echo "Merges ${BEHIND} commit(s) from \`constructive-io/libpg-query-node@${SHORT_SHA}\`."
+            echo ""
+            echo "> [!NOTE]"
+            echo "> Tree hygiene only — **no version bump, no npm publish**. Nothing upstream"
+            echo "> is compiled into this package; releases are driven by pganalyze via"
+            echo "> \`libpg-query-sync.yml\`."
+            echo ""
+
+            if [ -s /tmp/autoresolved.txt ]; then
+              echo "### Auto-resolved conflicts"
+              echo ""
+              echo "Upstream modified files this fork deliberately deleted. The deletion was"
+              echo "kept — review if that is no longer what you want:"
+              echo ""
+              while read -r f; do [ -n "$f" ] && echo "- \`$f\`"; done < /tmp/autoresolved.txt
+              echo ""
+            fi
+
+            if [ "$DRIFT" = "failure" ]; then
+              echo "### ⚠️ Upstream API drift"
+              echo ""
+              cat /tmp/api-drift.md
+              echo ""
+              echo "Port anything that matters into \`native/src/index.ts\`, then accept the new"
+              echo "baseline with:"
+              echo ""
+              echo '```'
+              echo "cd native && node scripts/check-api-drift.mjs --update"
+              echo '```'
+              echo ""
+            else
+              echo "### Upstream API"
+              echo ""
+              echo "No change to upstream's exported surface."
+              echo ""
+            fi
+
+            if [ "$CSOURCE_CHANGED" = "true" ]; then
+              echo "### ⚠️ Upstream C-source pin changed"
+              echo ""
+              echo "| | Repo | Tag |"
+              echo "|---|---|---|"
+              echo "| Before | \`${BEFORE_REPO}\` | \`${BEFORE_TAG}\` |"
+              echo "| After | \`${AFTER_REPO}\` | \`${AFTER_TAG}\` |"
+              echo ""
+              echo "This fork deliberately builds from **pganalyze** release tags, not"
+              echo "upstream's \`*-constructive\` branch. Revisit that choice only on purpose —"
+              echo "a moving branch cannot be pinned reproducibly."
+              echo ""
+            fi
+
+            echo "- Compare: https://github.com/constructive-io/libpg-query-node/compare/${BEFORE_TAG:-main}...${UPSTREAM_SHA}"
+            echo ""
+            if [ "$HAS_PAT" != "true" ]; then
+              echo "> [!WARNING]"
+              echo "> Opened with \`GITHUB_TOKEN\`, so CI did **not** start automatically."
+              echo "> Close and reopen this PR to trigger it, or set a \`SYNC_PAT\` secret."
+              echo ""
+            fi
+            echo "---"
+            echo "Opened by \`upstream-tree-sync.yml\`."
+          } > /tmp/pr-body.md
+
+          gh label create "upstream-sync" --color "0e8a16" \
+            --description "Merge from constructive-io/libpg-query-node" 2>/dev/null || true
+          if [ "$DRIFT" = "failure" ]; then
+            gh label create "api-drift" --color "fbca04" \
+              --description "Upstream exported API changed; needs a port" 2>/dev/null || true
+            LABELS="upstream-sync,api-drift"
+          else
+            LABELS="upstream-sync"
+          fi
+
+          gh pr create \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Sync upstream tree (${SHORT_SHA})" \
+            --body-file /tmp/pr-body.md \
+            --label "$LABELS"

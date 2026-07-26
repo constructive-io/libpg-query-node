@@ -7,11 +7,10 @@ on:
       - "native/**"
       - ".github/workflows/native-ci.yml"
       - ".github/workflows/native-build.yml"
+  # Deliberately unfiltered by path. Upstream tree-sync PRs touch no native/**
+  # files, so a paths filter would let them merge with no native CI at all, and
+  # enumerating the upstream paths a merge might touch is not tractable.
   pull_request:
-    paths:
-      - "native/**"
-      - ".github/workflows/native-ci.yml"
-      - ".github/workflows/native-build.yml"
 
 permissions:
   contents: read
