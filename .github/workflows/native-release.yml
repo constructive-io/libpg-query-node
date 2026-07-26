@@ -1,11 +1,19 @@
 name: Native Release
 
+# The committed version in native/package.json is the release trigger. Merging a
+# version bump publishes it; nothing else does. The `check` job makes this
+# idempotent — re-pushes, reverts and force-pushes cannot double-publish.
 on:
+  push:
+    branches: [napi-jemalloc, main]
+    paths:
+      - "native/package.json"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 0.1.0 or 0.2.0-beta.0)"
-        required: true
+        description: "Version to publish (blank = use the committed native/package.json version)"
+        required: false
+        default: ""
       tag:
         description: "npm dist-tag (blank = auto: 'latest' for releases, prerelease id for X.Y.Z-<id>.N, e.g. beta)"
         required: false
@@ -15,19 +23,100 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
+  check:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      should-publish: ${{ steps.resolve.outputs.should-publish }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - id: resolve
+        name: Resolve version and dist-tag
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Committed version is the default; workflow_dispatch may override it.
+          COMMITTED=$(node -p "require('./native/package.json').version")
+          VERSION="${VERSION_INPUT:-$COMMITTED}"
+          echo "Committed version: $COMMITTED"
+          echo "Resolved version:  $VERSION"
+
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::Not a valid semver version: '$VERSION'"; exit 1 ;;
+          esac
+
+          # Auto dist-tag: prerelease id for X.Y.Z-<id>.N, else 'latest'.
+          TAG="$TAG_INPUT"
+          if [ -z "$TAG" ]; then
+            case "$VERSION" in
+              *-*)
+                rest=${VERSION#*-}
+                id=${rest%%[!A-Za-z]*}
+                TAG=${id:-beta}
+                ;;
+              *)
+                TAG=latest
+                ;;
+            esac
+          fi
+
+          # Never push a prerelease onto 'latest'.
+          case "$VERSION" in
+            *-*)
+              if [ "$TAG" = "latest" ]; then
+                echo "::error::Refusing to publish prerelease $VERSION to 'latest'"
+                exit 1
+              fi
+              ;;
+          esac
+
+          # Idempotence: skip if this version is already on npm. `npm view` exits
+          # non-zero for a package with no versions at all, so tolerate that.
+          PUBLISHED=$(npm view "@ashbyhq/libpg-query-native@$VERSION" version 2>/dev/null || true)
+          if [ -n "$PUBLISHED" ]; then
+            echo "::notice::@ashbyhq/libpg-query-native@$VERSION is already published — skipping."
+            echo "should-publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing with dist-tag: $TAG"
+
   build:
     name: Build
+    needs: check
+    if: ${{ needs.check.outputs.should-publish == 'true' }}
     uses: ./.github/workflows/native-build.yml
     with:
       upload-retention-days: 1
 
   publish:
     name: Publish to npm
-    needs: build
+    needs: [check, build]
+    if: ${{ needs.check.outputs.should-publish == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: write # push the native-v* tag
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -47,6 +136,7 @@ jobs:
       - name: Arrange prebuilds into expected layout
         working-directory: native
         run: |
+          set -euo pipefail
           for dir in prebuilds/prebuild-*/; do
             platform=$(basename "$dir" | sed 's/prebuild-//')
             mkdir -p "prebuilds/${platform}"
@@ -56,52 +146,42 @@ jobs:
           echo "Prebuilds:"
           find prebuilds -name '*.node' | sort
 
-      - name: Set version
+      # A partial prebuild set would publish a main package advertising platform
+      # packages that do not exist. `needs: build` already gates on every matrix
+      # leg, so this is defence in depth against a silent artifact-download miss.
+      - name: Verify every platform was built
         working-directory: native
-        env:
-          VERSION: ${{ inputs.version }}
         run: |
-          npm version "$VERSION" --no-git-tag-version
-          node scripts/sync-optional-deps.mjs
-          echo "Version set to $VERSION"
-
-      - name: Determine npm dist-tag
-        env:
-          VERSION: ${{ inputs.version }}
-          TAG_INPUT: ${{ inputs.tag }}
-        run: |
-          TAG="$TAG_INPUT"
-          if [ -z "$TAG" ]; then
-            case "$VERSION" in
-              *-*)
-                # prerelease: use the leading alpha id after '-' (0.2.0-beta.1 -> beta)
-                rest=${VERSION#*-}
-                id=${rest%%[!A-Za-z]*}
-                TAG=${id:-beta}
-                ;;
-              *)
-                TAG=latest
-                ;;
-            esac
+          set -euo pipefail
+          expected=$(node -p "Object.keys(require('./platforms.json')).length")
+          actual=$(find prebuilds -name '*.node' | wc -l | tr -d ' ')
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Expected $expected prebuilds, found $actual"
+            exit 1
           fi
-          # Safety: never push a prerelease onto the 'latest' tag.
-          case "$VERSION" in
-            *-*)
-              if [ "$TAG" = "latest" ]; then
-                echo "Refusing to publish prerelease $VERSION to 'latest'"; exit 1
-              fi
-              ;;
-          esac
-          echo "NPM_TAG=$TAG" >> "$GITHUB_ENV"
-          echo "Publishing with dist-tag: $TAG"
+          echo "All $expected platforms present."
 
+      # Install and compile BEFORE injecting optionalDependencies: they pin this
+      # package's own (not yet published) version, which desyncs the lockfile and
+      # makes `npm ci` fail with EUSAGE.
       - name: Install dependencies
         working-directory: native
-        run: npm install
+        run: npm ci
 
       - name: Build TypeScript
         working-directory: native
         run: npm run build:ts
+
+      - name: Set version and inject platform pins
+        working-directory: native
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node scripts/sync-optional-deps.mjs
+          echo "--- published manifest ---"
+          node -e "const p=require('./package.json');console.log(p.name,p.version);console.log(p.optionalDependencies)"
 
       - name: Generate platform packages
         working-directory: native
@@ -112,45 +192,53 @@ jobs:
         working-directory: native
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ needs.check.outputs.tag }}
         run: |
+          set -euo pipefail
           for pkg_dir in packages/*/; do
-            echo "Publishing $(basename $pkg_dir) (tag: $NPM_TAG)..."
-            cd "$pkg_dir"
-            npm publish --access public --tag "$NPM_TAG"
-            cd ../..
+            echo "Publishing $(basename "$pkg_dir") (tag: $NPM_TAG)..."
+            (cd "$pkg_dir" && npm publish --access public --tag "$NPM_TAG")
           done
 
+      # Last, so a failure above cannot leave the main package pointing at
+      # platform packages that were never published.
       - name: Publish main package
         if: ${{ !inputs.dry-run }}
         working-directory: native
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ needs.check.outputs.tag }}
         run: npm publish --access public --tag "$NPM_TAG"
 
       - name: Dry run summary
         if: ${{ inputs.dry-run }}
         working-directory: native
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
+          NPM_TAG: ${{ needs.check.outputs.tag }}
         run: |
-          echo "=== DRY RUN ==="
-          echo ""
-          echo "Would publish version $VERSION with dist-tag: $NPM_TAG"
-          echo ""
-          echo "Platform packages:"
-          for pkg_dir in packages/*/; do
-            size=$(du -h "${pkg_dir}libpg_query_native.node" | cut -f1)
-            echo "  $(basename $pkg_dir): ${size}"
-          done
-          echo ""
-          echo "Main package: @ashbyhq/libpg-query-native"
-          echo ""
-          echo "To publish for real, re-run with dry-run unchecked."
+          {
+            echo "### Dry run"
+            echo ""
+            echo "Would publish \`$VERSION\` with dist-tag \`$NPM_TAG\`."
+            echo ""
+            echo "| Platform package | Size |"
+            echo "|---|---|"
+            for pkg_dir in packages/*/; do
+              size=$(du -h "${pkg_dir}libpg_query_native.node" | cut -f1)
+              echo "| $(basename "$pkg_dir") | ${size} |"
+            done
+            echo ""
+            echo "Main package: \`@ashbyhq/libpg-query-native\`"
+            echo ""
+            echo "Re-run with dry-run unchecked to publish."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create git tag
         if: ${{ !inputs.dry-run }}
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
+          set -euo pipefail
           git tag "native-v$VERSION"
           git push origin "native-v$VERSION"
