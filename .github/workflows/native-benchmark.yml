@@ -2,7 +2,7 @@ name: Native Benchmark
 
 on:
   push:
-    branches: [main]
+    branches: [napi-jemalloc, main]
     paths:
       - "native/**"
       - ".github/workflows/native-benchmark.yml"
@@ -40,7 +40,7 @@ jobs:
       - name: Build native addon
         working-directory: native
         run: |
-          npm install
+          npm ci
           make build PLATFORM_KEY=linux-x64
           npm run build:ts
 

@@ -62,9 +62,13 @@ jobs:
           PLATFORM_KEY: ${{ matrix.platform }}
         run: |
           cd native
-          npm install
+          npm ci
           npm run build:ts
           node scripts/package-platforms.mjs
+          # Inject optionalDependencies so the packed tarball matches what gets
+          # published. They are not committed to package.json (they pin the
+          # package's own unpublished version, which breaks `npm ci`).
+          node scripts/sync-optional-deps.mjs
           mkdir -p dist-packs
           npm pack --pack-destination "$PWD/dist-packs"
           (cd "packages/libpg-query-native-$PLATFORM_KEY" \
@@ -84,7 +88,8 @@ jobs:
           docker run --rm -e PLATFORM_KEY -v "$GITHUB_WORKSPACE/native:/work" -w /work \
             "$CONTAINER" sh -c '
               apk add --no-cache git &&
-              npm install && npm run build:ts && node scripts/package-platforms.mjs &&
+              npm ci && npm run build:ts && node scripts/package-platforms.mjs &&
+              node scripts/sync-optional-deps.mjs &&
               mkdir -p dist-packs &&
               npm pack --pack-destination /work/dist-packs &&
               (cd "packages/libpg-query-native-$PLATFORM_KEY" && npm pack --pack-destination /work/dist-packs) &&

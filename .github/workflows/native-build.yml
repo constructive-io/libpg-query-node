@@ -67,7 +67,7 @@ jobs:
         env:
           PLATFORM_KEY: ${{ matrix.platform }}
         run: |
-          npm install
+          npm ci
           make build PLATFORM_KEY="$PLATFORM_KEY"
           npm run build:ts
           npm test
@@ -81,7 +81,7 @@ jobs:
           docker run --rm -e PLATFORM_KEY -v "$GITHUB_WORKSPACE/native:/work" -w /work \
             "$CONTAINER" sh -c '
               apk add --no-cache git make g++ python3 &&
-              npm install &&
+              npm ci &&
               make build PLATFORM_KEY="$PLATFORM_KEY" &&
               npm run build:ts &&
               npm test
