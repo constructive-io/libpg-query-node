@@ -173,7 +173,7 @@ noise — tune it in `.github/workflows/native-benchmark.yml`.
 
 ```bash
 cd native
-npm install
+npm ci
 make build    # builds libpg_query + the .node addon
 npm run build:ts  # compiles TypeScript
 npm test
@@ -187,6 +187,84 @@ node scripts/package-platforms.mjs
 ```
 
 This creates `packages/libpg-query-native-<platform>/` directories ready for `npm publish`.
+
+## Releasing
+
+**The committed version in `package.json` is the release trigger.** Merging a
+version bump to the release branch publishes it; nothing else does. Re-pushes,
+reverts and re-runs are safe — `native-release.yml` skips any version already on
+npm.
+
+To cut a release by hand: bump `version` in `native/package.json`, commit, merge.
+The dist-tag is derived from the version (`0.2.0` → `latest`, `0.2.0-beta.1` →
+`beta`), and publishing a prerelease to `latest` is refused outright.
+`native-release.yml` also accepts a `workflow_dispatch` with `dry-run` for
+rehearsals.
+
+### What tracks what
+
+Two independent automations, deliberately split:
+
+| Workflow | Trigger | Cuts a release? |
+|---|---|---|
+| `libpg-query-sync.yml` | new `pganalyze/libpg_query` release, weekly poll | **Yes** |
+| `upstream-tree-sync.yml` | `constructive-io/libpg-query-node` commits, monthly | No |
+
+The split follows from what actually ships. This package is built from exactly
+three inputs: `src/addon.cc` + `src/index.ts`, the `libpg_query` C library, and
+`@pgsql/types` (types only, zero runtime). **The C library is 100% of parsing
+behaviour, and nothing from `constructive-io/libpg-query-node` is compiled into
+the published artifact** — the fork shares a git tree with it and borrowed the
+shape of its API, and that is the whole relationship.
+
+So a new pganalyze release is what changes what consumers get, and it is what
+triggers a release. Upstream's npm publishes are a lagging proxy for something
+that never reaches this package: upstream builds PG 18 from their own
+`constructive-io/libpg_query` fork at the moving branch `18-constructive`, so
+their `18.1.x` versions are their private patches, not new pganalyze releases.
+This fork stays on immutable pganalyze tags. `upstream-tree-sync.yml` flags it in
+the PR body if that ever changes, so the choice gets revisited on purpose.
+
+`x-upstream` in `package.json` records what a given build tracks:
+
+```json
+"x-upstream": {
+  "libpgQueryRepo": "https://github.com/pganalyze/libpg_query.git",
+  "libpgQueryTag": "18.0.0",
+  "pgMajor": "18",
+  "constructiveBaseSha": "74ed197..."
+}
+```
+
+### Upstream API drift
+
+`src/index.ts` is a hand-written reimplementation of upstream's
+`versions/18/src/index.ts`, so **upstream API changes do not arrive via a merge**
+— someone has to port them. `upstream-tree-sync.yml` compares upstream's exported
+surface against `.upstream-api-snapshot.json` and labels the PR `api-drift` when
+it moves. After porting, accept the new baseline:
+
+```bash
+cd native && node scripts/check-api-drift.mjs --update
+```
+
+### Setup
+
+- **`NPM_TOKEN`** — required to publish.
+- **`SYNC_PAT`** — recommended. A PR opened with the default `GITHUB_TOKEN` does
+  not trigger other workflows, so sync PRs would arrive with no CI. Without it
+  both sync workflows still run, but warn in the PR body; closing and reopening
+  the PR triggers CI manually.
+
+### Why `optionalDependencies` is not in `package.json`
+
+The five platform packages pin this package's own version, so committing them
+desyncs the lockfile on every bump and `npm ci` fails with `EUSAGE` before it can
+install anything. They are a publish-time construct — `src/index.ts` prefers the
+local `prebuilds/<platform>/` binary, and CI installs platform tarballs
+explicitly. `scripts/sync-optional-deps.mjs` injects them at publish time.
+
+**`npm ci` must run before `sync-optional-deps.mjs`, never after.**
 
 ## License
 
