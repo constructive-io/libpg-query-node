@@ -4,6 +4,8 @@
   "description": "PostgreSQL query parser monorepo",
   "packageManager": "pnpm@8.15.0",
   "scripts": {
+    "policy": "pnpm-policy generate --builds-key onlyBuiltDependencies",
+    "policy:check": "pnpm-policy check --builds-key onlyBuiltDependencies",
     "build": "pnpm --filter libpg-query build",
     "test": "pnpm --filter libpg-query test",
     "clean": "pnpm --filter libpg-query clean",
@@ -32,10 +34,12 @@
     "publish:parser": "pnpm --filter @pgsql/parser publish"
   },
   "devDependencies": {
+    "@constructive-io/pnpm-policy": "0.2.1",
     "@types/node": "^20.0.0",
     "copyfiles": "^2.4.1",
     "glob": "11.0.3",
     "pg-proto-parser": "^1.28.2",
+    "pnpm-policy": "0.2.2",
     "rimraf": "^5.0.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.3"

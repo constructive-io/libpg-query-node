@@ -159,6 +159,9 @@ jobs:
       - name: Install Dependencies 🧶
         run: pnpm install
 
+      - name: Check supply-chain policy
+        run: pnpm run policy:check
+
       - name: Install Parser Dependencies 📦
         run: pnpm install
         working-directory: parser
