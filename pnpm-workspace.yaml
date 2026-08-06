@@ -1,10 +1,10 @@
 packages:
   - 'parser'
   - 'versions/18'
-  - 'versions/17' 
-  - 'versions/16' 
-  - 'versions/15' 
-  - 'versions/14' 
+  - 'versions/17'
+  - 'versions/16'
+  - 'versions/15'
+  - 'versions/14'
   - 'versions/13'
   - 'types/18'
   - 'types/17'
@@ -17,4 +17,28 @@ packages:
   - 'enums/16'
   - 'enums/15'
   - 'enums/14'
-  - 'enums/13' 
+  - 'enums/13'
+
+# Managed by pnpm-policy — run `pnpm-policy generate` after editing pnpm-policy.yaml.
+
+# A third-party release must be 2d old before it can be installed.
+# Most malicious releases are found and yanked well inside that window.
+minimumReleaseAge: 2880
+
+# Exempt from the wait: 6 scope glob(s), 5 first-party package(s).
+# First-party membership comes from what pyramation publishes on npm — waiting on your own release protects nothing.
+minimumReleaseAgeExclude:
+  - "@constructive-db/*"
+  - "@constructive-io/*"
+  - "@launchql/*"
+  - "@pgpm/*"
+  - "@pgpmjs/*"
+  - "@pgsql/*"
+  - nested-obj
+  - pg-proto-parser
+  - pnpm-policy
+  - strfy-js
+  - yamlize
+
+# Transitive dependencies must come from the registry, not from git or a URL.
+blockExoticSubdeps: true
