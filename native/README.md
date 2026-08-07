@@ -236,6 +236,37 @@ the PR body if that ever changes, so the choice gets revisited on purpose.
 }
 ```
 
+### The consumer contract
+
+This package is consumed transitively. `pgsql-parser` depends on `libpg-query`,
+and we substitute for it with an npm `overrides` alias:
+
+```json
+"overrides": { "libpg-query": "npm:@ashbyhq/libpg-query-native@^0.1.0" }
+```
+
+An alias is required rather than a version match — `pgsql-parser` pins
+`libpg-query` to an *exact* version, not a range.
+
+`pgsql-parser`'s entry point is a pure re-export shim, so the contract we owe it
+is small — currently `loadModule`, `parse`, `parseSync`. Note that `loadModule`
+is a no-op here (the addon loads synchronously via `require`) but **must not be
+removed**: it is part of the contract, and upstream's WASM build genuinely needs
+it awaited.
+
+The realistic failure is not upstream adding an export — it is `pgsql-parser`
+beginning to use a symbol we do not implement. That is a different repo from the
+one `upstream-tree-sync.yml` watches, on a faster release cadence, so the
+`consumer-contract` CI job covers it: it installs the real `pgsql-parser` over
+our packed tarball, derives the required symbol set from the installed code
+rather than hardcoding it, and fails naming any symbol we are missing.
+
+Run it the way CI does — pack, install with the override, then:
+
+```bash
+node native/test/consumer-contract.mjs   # from the scratch project
+```
+
 ### Upstream API drift
 
 `src/index.ts` is a hand-written reimplementation of upstream's
