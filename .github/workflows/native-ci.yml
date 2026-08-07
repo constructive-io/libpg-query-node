@@ -97,6 +97,7 @@ jobs:
               echo "Installed @ashbyhq packages:" && ls node_modules/@ashbyhq &&
               cp /work/test/smoke.mjs smoke.mjs &&
               node smoke.mjs
+            '
 
   # This package is consumed transitively: pgsql-parser depends on libpg-query,
   # and we substitute for it via an npm `overrides` alias. Its entry point is a
@@ -164,4 +165,3 @@ jobs:
           set -euo pipefail
           cp "$GITHUB_WORKSPACE/native/test/consumer-contract.mjs" /tmp/consumer/
           cd /tmp/consumer && node consumer-contract.mjs
-            '
