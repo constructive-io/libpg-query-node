@@ -99,17 +99,20 @@ jobs:
               node smoke.mjs
             '
 
-  # This package is consumed transitively: pgsql-parser depends on libpg-query,
-  # and we substitute for it via an npm `overrides` alias. Its entry point is a
-  # re-export shim, so the contract we owe it is a handful of symbols — and the
-  # real risk is pgsql-parser starting to use one we do not implement. That is a
-  # different repo from the one upstream-tree-sync.yml watches, on a faster
-  # cadence, so it needs its own check.
+  # Consumers alias the `libpg-query` dependency key straight to this package and
+  # import from it directly, then hand our AST to pgsql-deparser to render back
+  # to SQL. This job reproduces that exact shape.
+  #
+  # Two things are under test. The symbol contract (what consumers import by
+  # name) is ours to keep. The AST contract — whether pgsql-deparser can still
+  # render what we emit — is the load-bearing one, and it is invisible to
+  # TypeScript, since ParseResult is identical across @pgsql/types majors. A
+  # PG-major bump can only ever surface there, at runtime.
   #
   # Contract-shaped, not platform-shaped: one runner is enough. Per-platform
   # binary loading is already covered by the smoke test above.
   consumer-contract:
-    name: Consumer contract (pgsql-parser)
+    name: Consumer contract
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -141,9 +144,11 @@ jobs:
           (cd packages/libpg-query-native-linux-x64 \
             && npm pack --pack-destination "$PWD/../../dist-packs")
 
-      # pgsql-parser pins libpg-query exactly (not a range), so substitution has
-      # to go through `overrides`, aliased to our packed tarball.
-      - name: Install pgsql-parser over our package
+      # Reproduce the downstream install: `libpg-query` aliased to us, alongside
+      # the deparser that consumes our AST. Pinned to the deparser's 17 line,
+      # which is what consumers are on — the PG18-parser/PG17-deparser pairing is
+      # exactly the combination worth testing.
+      - name: Install as a consumer does
         run: |
           set -euo pipefail
           mkdir -p /tmp/consumer && cd /tmp/consumer
@@ -153,12 +158,12 @@ jobs:
           node -e "
             const fs=require('fs');
             const p=JSON.parse(fs.readFileSync('package.json','utf8'));
-            p.dependencies={'pgsql-parser':'latest'};
-            p.overrides={'libpg-query':'file:$MAIN'};
+            p.dependencies={'libpg-query':'file:$MAIN','pgsql-deparser':'^17.0.0'};
             fs.writeFileSync('package.json',JSON.stringify(p,null,2));
           "
           npm install --omit=optional
           npm install --no-save "$PLAT"
+          node -p "'libpg-query -> '+require('/tmp/consumer/node_modules/libpg-query/package.json').name"
 
       - name: Verify the consumer contract
         run: |

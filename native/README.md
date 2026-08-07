@@ -238,30 +238,55 @@ the PR body if that ever changes, so the choice gets revisited on purpose.
 
 ### The consumer contract
 
-This package is consumed transitively. `pgsql-parser` depends on `libpg-query`,
-and we substitute for it with an npm `overrides` alias:
+Consumers alias the `libpg-query` dependency key straight to this package and
+import from it directly:
 
 ```json
-"overrides": { "libpg-query": "npm:@ashbyhq/libpg-query-native@^0.1.0" }
+"dependencies": { "libpg-query": "npm:@ashbyhq/libpg-query-native@0.1.1-beta.0" }
 ```
 
-An alias is required rather than a version match — `pgsql-parser` pins
-`libpg-query` to an *exact* version, not a range.
+```ts
+import { parseSync } from "libpg-query";
+import { deparseSync } from "pgsql-deparser";
+```
 
-`pgsql-parser`'s entry point is a pure re-export shim, so the contract we owe it
-is small — currently `loadModule`, `parse`, `parseSync`. Note that `loadModule`
-is a no-op here (the addon loads synchronously via `require`) but **must not be
-removed**: it is part of the contract, and upstream's WASM build genuinely needs
-it awaited.
+Note `pgsql-parser` is **not** in this path. It sits in front of upstream's WASM
+`libpg-query` and pulls it back in transitively — a top-level alias does not
+redirect a transitive dependency — so consumers drop it entirely.
 
-The realistic failure is not upstream adding an export — it is `pgsql-parser`
-beginning to use a symbol we do not implement. That is a different repo from the
-one `upstream-tree-sync.yml` watches, on a faster release cadence, so the
-`consumer-contract` CI job covers it: it installs the real `pgsql-parser` over
-our packed tarball, derives the required symbol set from the installed code
-rather than hardcoding it, and fails naming any symbol we are missing.
+There are two contracts here, and only one of them is ours:
 
-Run it the way CI does — pack, install with the override, then:
+**The symbol contract** — what consumers import by name, currently just
+`parseSync`. Small, and breaking it is squarely our fault. The rest of the
+exported surface is asserted too, so a silent narrowing gets caught even though
+nothing in this repo would otherwise notice.
+
+**The AST contract** — whether the tree we emit is one `pgsql-deparser` can still
+render. This is the load-bearing one, and it is **invisible to TypeScript**:
+`ParseResult` is byte-identical across `@pgsql/types` majors, so a PG-major bump
+on our side can only ever fail here, at runtime. The `consumer-contract` CI job
+round-trips representative migration SQL through `parseSync` → `deparseSync` →
+`parseSync` and compares ASTs (ignoring byte-offset `location` fields, which
+shift when the deparser reformats).
+
+#### Known PG18 gaps
+
+Our parser is PG 18; `pgsql-deparser` is still on its 17 line. Constructs added
+in PG 18 parse correctly here and are then **silently dropped or rewritten** on
+the way back out — neither side raises an error:
+
+| Construct | Round-trips as |
+|---|---|
+| `PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)` | `PRIMARY KEY (id, valid_at)` |
+| `RETURNING OLD.x, NEW.x` | clause dropped entirely |
+| `GENERATED ALWAYS AS (...) VIRTUAL` | `... STORED` |
+
+This is not fixable here, so the test reports it as a warning rather than
+failing. It matters because consumers round-trip migration SQL through
+parse → deparse: keep these constructs out of migrations until `pgsql-deparser`
+moves to an 18.x line. The warning flips to a note if the deparser catches up.
+
+Run it the way CI does — pack, install with the alias, then:
 
 ```bash
 node native/test/consumer-contract.mjs   # from the scratch project
