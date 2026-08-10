@@ -1,6 +1,6 @@
 {
   "name": "@ashbyhq/libpg-query-native",
-  "version": "0.1.1-beta.0",
+  "version": "0.1.1",
   "description": "PostgreSQL query parser — native N-API + jemalloc backend",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
