@@ -117,14 +117,31 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write # push the native-v* tag
+      id-token: write # mint the OIDC token npm trusted publishing verifies
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # registry-url is still required under trusted publishing — it points npm
+      # at the registry that will verify the OIDC token. No auth token is set.
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
           package-manager-cache: false
           registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing needs npm >= 11.5.1. Node 24.0.0 shipped 11.3.0, and
+      # `node-version: 24` floats to the newest 24.x — so assert rather than
+      # assume. Failing here is far cheaper than failing mid-publish.
+      - name: Verify npm supports trusted publishing
+        run: |
+          set -euo pipefail
+          have=$(npm --version)
+          need=11.5.1
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "::error::npm $have is too old for trusted publishing (need >= $need)"
+            exit 1
+          fi
+          echo "npm $have supports trusted publishing"
 
       - name: Download all prebuilds
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -187,16 +204,25 @@ jobs:
         working-directory: native
         run: node scripts/package-platforms.mjs
 
+      # Resumable: each package is skipped if that exact version is already on
+      # npm. Every package has its own trusted-publisher config, so one bad
+      # config fails a single publish mid-loop — re-running after fixing it then
+      # completes instead of dying on EPUBLISHCONFLICT for an earlier package.
       - name: Publish platform packages
         if: ${{ !inputs.dry-run }}
         working-directory: native
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ needs.check.outputs.tag }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
           for pkg_dir in packages/*/; do
-            echo "Publishing $(basename "$pkg_dir") (tag: $NPM_TAG)..."
+            name=$(node -p "require('./${pkg_dir}package.json').name")
+            if [ -n "$(npm view "${name}@${VERSION}" version 2>/dev/null || true)" ]; then
+              echo "Skipping ${name}@${VERSION} — already published"
+              continue
+            fi
+            echo "Publishing ${name}@${VERSION} (tag: $NPM_TAG)..."
             (cd "$pkg_dir" && npm publish --access public --tag "$NPM_TAG")
           done
 
@@ -206,7 +232,6 @@ jobs:
         if: ${{ !inputs.dry-run }}
         working-directory: native
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ needs.check.outputs.tag }}
         run: npm publish --access public --tag "$NPM_TAG"
 

@@ -306,7 +306,35 @@ cd native && node scripts/check-api-drift.mjs --update
 
 ### Setup
 
-- **`NPM_TOKEN`** — required to publish.
+**Publishing uses npm trusted publishing (OIDC) — there is no npm token.** The
+registry verifies the workflow's identity directly, so no long-lived credential
+exists to leak or rotate, and npm attaches a provenance attestation to every
+published version automatically.
+
+Each package carries its own trusted-publisher config, so all six need one:
+
+| Field | Value |
+|---|---|
+| Organization | `ashbyhq` |
+| Repository | `libpg-query-node` |
+| Workflow filename | `native-release.yml` |
+| Environment | *(none)* |
+
+```
+@ashbyhq/libpg-query-native
+@ashbyhq/libpg-query-native-darwin-arm64
+@ashbyhq/libpg-query-native-linux-x64
+@ashbyhq/libpg-query-native-linux-arm64
+@ashbyhq/libpg-query-native-linux-x64-musl
+@ashbyhq/libpg-query-native-linux-arm64-musl
+```
+
+Set them under *Settings → Trusted publisher* on each package's npmjs.com page.
+A missing or wrong config fails that one package's publish; the run is resumable,
+so fix it and re-run — already-published packages are skipped.
+
+Requires npm ≥ 11.5.1, which the release workflow asserts before publishing.
+
 - **`SYNC_PAT`** — recommended. A PR opened with the default `GITHUB_TOKEN` does
   not trigger other workflows, so sync PRs would arrive with no CI. Without it
   both sync workflows still run, but warn in the PR body; closing and reopening
