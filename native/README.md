@@ -294,8 +294,9 @@ node native/test/consumer-contract.mjs   # from the scratch project
 
 ### Upstream API drift
 
-`src/index.ts` is a hand-written reimplementation of upstream's
-`versions/18/src/index.ts`, so **upstream API changes do not arrive via a merge**
+`src/index.ts` is a hand-written reimplementation of
+[constructive-io/libpg-query-node `versions/18/src/index.ts`](https://github.com/constructive-io/libpg-query-node/blob/main/versions/18/src/index.ts),
+so **upstream API changes do not arrive via a merge**
 — someone has to port them. `upstream-tree-sync.yml` compares upstream's exported
 surface against `.upstream-api-snapshot.json` and labels the PR `api-drift` when
 it moves. After porting, accept the new baseline:

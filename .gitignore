@@ -8,18 +8,11 @@ libs/
 esm/
 cjs/
 dist/
-
-# WASM build outputs
-wasm/
-versions/*/wasm/
-*.wasm
-wasm/libpg-query.js
+native/prebuilds/
+native/packages/
 
 # Build cache and temporary files
 .cache
-
-# Generated files
-libpg_query/**/*.proto
 
 # Development tools and logs
 npm-debug.log

@@ -64,9 +64,8 @@ jobs:
         if: ${{ steps.fetch.outputs.behind != '0' }}
         run: |
           set -euo pipefail
-          # Upstream's own C-library pin, before the merge, for later comparison.
-          before_repo=$(git show HEAD:versions/18/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' | head -1 || true)
-          before_tag=$(git show HEAD:versions/18/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' | head -1 || true)
+          before_repo=$(git show HEAD:native/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' | head -1 || true)
+          before_tag=$(git show HEAD:native/Makefile 2>/dev/null | sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' | head -1 || true)
           echo "before-repo=${before_repo}" >> "$GITHUB_OUTPUT"
           echo "before-tag=${before_tag}" >> "$GITHUB_OUTPUT"
           echo "Before: ${before_repo} @ ${before_tag}"
@@ -89,10 +88,11 @@ jobs:
             exit 0
           fi
 
-          # The fork deletes upstream's three WASM workflows, and upstream keeps
-          # editing them, so every sync produces "deleted by us" (DU) conflicts.
-          # Escalating those to a human each time would make this useless — the
-          # standing intent is to keep the deletion. Anything else still stops.
+          # The fork deletes upstream's WASM workflows and packages, and upstream
+          # keeps editing them, so every sync produces "deleted by us" (DU)
+          # conflicts. Escalating those to a human each time would make this
+          # useless — the standing intent is to keep the deletion. Anything else
+          # still stops.
           OTHER=$(git status --porcelain | grep -E '^(DD|AU|UD|UA|AA|UU)' || true)
           DU_FILES=$(git status --porcelain | sed -n 's/^DU //p')
 
@@ -115,6 +115,38 @@ jobs:
           git commit -q --no-edit
           echo "conflict=false" >> "$GITHUB_OUTPUT"
 
+      - name: Strip upstream WASM tree
+        if: ${{ steps.merge.outputs.conflict == 'false' }}
+        run: |
+          set -euo pipefail
+          : > /tmp/stripped.txt
+
+          strip() {
+            local path="$1"
+            if [ -e "$path" ]; then
+              rm -rf "$path"
+              echo "$path" >> /tmp/stripped.txt
+            fi
+          }
+
+          for dir in versions parser full templates types enums protos; do
+            strip "$dir"
+          done
+          strip LOADING_WASM.md
+          strip pnpm-lock.yaml
+          strip pnpm-workspace.yaml
+
+          for wf in ci.yml build-wasm.yml build-wasm-no-docker.yaml; do
+            strip ".github/workflows/$wf"
+          done
+
+          if [ -s /tmp/stripped.txt ]; then
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -q -m "chore: strip upstream WASM tree after merge"
+            fi
+          fi
+
       - name: Report conflict and stop
         if: ${{ steps.merge.outputs.conflict == 'true' }}
         env:
@@ -134,9 +166,9 @@ jobs:
             while read -r f; do [ -n "$f" ] && echo "- \`$f\`"; done < /tmp/conflicts.txt
             echo ""
             echo "The fork's conflict surface is normally small: it modifies one upstream"
-            echo "file (\`README.md\`) and deletes three WASM workflows, so most conflicts are"
-            echo "delete/modify on \`.github/workflows/{ci,build-wasm,build-wasm-no-docker}\`"
-            echo "and are resolved by keeping the deletion."
+            echo "file (\`README.md\`) and deletes upstream's WASM workflows and packages, so"
+            echo "most conflicts are delete/modify on \`.github/workflows/{ci,build-wasm,...}\`,"
+            echo "\`versions/\`, \`parser/\`, etc., and are resolved by keeping the deletion."
             echo ""
             echo "Resolve locally:"
             echo ""
@@ -170,8 +202,8 @@ jobs:
           BEFORE_TAG: ${{ steps.state.outputs.before-tag }}
         run: |
           set -euo pipefail
-          after_repo=$(sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' versions/18/Makefile | head -1 || true)
-          after_tag=$(sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' versions/18/Makefile | head -1 || true)
+          after_repo=$(sed -n 's/^LIBPG_QUERY_REPO *:*= *//p' native/Makefile | head -1 || true)
+          after_tag=$(sed -n 's/^LIBPG_QUERY_TAG *:*= *//p' native/Makefile | head -1 || true)
           echo "After: ${after_repo} @ ${after_tag}"
 
           if [ "$after_repo" != "$BEFORE_REPO" ] || [ "$after_tag" != "$BEFORE_TAG" ]; then
@@ -225,6 +257,15 @@ jobs:
               echo "kept — review if that is no longer what you want:"
               echo ""
               while read -r f; do [ -n "$f" ] && echo "- \`$f\`"; done < /tmp/autoresolved.txt
+              echo ""
+            fi
+
+            if [ -s /tmp/stripped.txt ]; then
+              echo "### Stripped upstream WASM tree"
+              echo ""
+              echo "These upstream paths were removed after the merge:"
+              echo ""
+              while read -r f; do [ -n "$f" ] && echo "- \`$f\`"; done < /tmp/stripped.txt
               echo ""
             fi
 

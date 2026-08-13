@@ -1,5 +1,5 @@
 {
-  "source": "../versions/18/src/index.ts",
+  "source": "https://raw.githubusercontent.com/constructive-io/libpg-query-node/main/versions/18/src/index.ts",
   "exports": [
     "* from @pgsql/types",
     "SqlError",

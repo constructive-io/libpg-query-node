@@ -1,43 +1,10 @@
 {
-  "name": "libpg-query-monorepo",
+  "name": "libpg-query-node",
   "private": true,
-  "description": "PostgreSQL query parser monorepo",
-  "packageManager": "pnpm@8.15.0",
+  "description": "Native N-API PostgreSQL query parser",
   "scripts": {
-    "build": "pnpm --filter libpg-query build",
-    "test": "pnpm --filter libpg-query test",
-    "clean": "pnpm --filter libpg-query clean",
-    "build:all": "pnpm -r build",
-    "test:all": "pnpm -r test",
-    "clean:all": "pnpm -r clean",
-    "build:versions": "pnpm --filter './versions/*' build",
-    "test:versions": "pnpm --filter './versions/*' test",
-    "clean:versions": "pnpm --filter './versions/*' clean",
-    "analyze:sizes": "node scripts/analyze-sizes.js",
-    "fetch:protos": "node scripts/fetch-protos.js",
-    "build:types": "node scripts/build-types.js",
-    "prepare:types": "node scripts/prepare-types.js",
-    "build:enums": "node scripts/build-enums.js",
-    "prepare:enums": "node scripts/prepare-enums.js",
-    "publish:types": "node scripts/publish-types.js",
-    "publish:enums": "node scripts/publish-enums.js",
-    "publish:versions": "node scripts/publish-versions.js",
-    "update:versions-types": "node scripts/update-versions-types.js",
-    "copy:templates": "node scripts/copy-templates.js",
-    "build:parser": "pnpm --filter @pgsql/parser build",
-    "build:parser:lts": "PARSER_BUILD_TYPE=lts pnpm --filter @pgsql/parser build",
-    "build:parser:full": "PARSER_BUILD_TYPE=full pnpm --filter @pgsql/parser build",
-    "build:parser:legacy": "PARSER_BUILD_TYPE=legacy pnpm --filter @pgsql/parser build",
-    "test:parser": "pnpm --filter @pgsql/parser test",
-    "publish:parser": "pnpm --filter @pgsql/parser publish"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "copyfiles": "^2.4.1",
-    "glob": "11.0.3",
-    "pg-proto-parser": "^1.28.2",
-    "rimraf": "^5.0.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.3"
+    "build": "npm run build --prefix native",
+    "test": "npm run test --prefix native",
+    "clean": "npm run clean --prefix native"
   }
 }
