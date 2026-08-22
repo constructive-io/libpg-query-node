@@ -6,12 +6,6 @@
 WASM_OUT_DIR := wasm
 WASM_OUT_NAME := libpg-query
 WASM_MODULE_NAME := PgQueryModule
-
-# WASM memory configuration (bytes). Override on the make command line for
-# low-memory variants, e.g. `make build WASM_INITIAL_MEMORY=33554432` (32MiB).
-WASM_INITIAL_MEMORY ?= 134217728
-WASM_MAXIMUM_MEMORY ?= 1073741824
-WASM_STACK_SIZE ?= 33554432
 # LIBPG_QUERY_REPO := https://github.com/pganalyze/libpg_query.git
 # LIBPG_QUERY_TAG := 17-6.1.0
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
@@ -79,9 +73,9 @@ ifdef EMSCRIPTEN
 		-sMODULARIZE=1 \
 		-sEXPORT_ES6=0 \
 		-sALLOW_MEMORY_GROWTH=1 \
-		-sINITIAL_MEMORY=$(WASM_INITIAL_MEMORY) \
-		-sMAXIMUM_MEMORY=$(WASM_MAXIMUM_MEMORY) \
-        -sSTACK_SIZE=$(WASM_STACK_SIZE) \
+		-sINITIAL_MEMORY=134217728 \
+		-sMAXIMUM_MEMORY=1073741824 \
+        -sSTACK_SIZE=33554432 \
 		-lpg_query \
 		-o $@ \
 		$(SRC_FILES)
