@@ -271,15 +271,23 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         return safe_strdup("{\"version\":0,\"tokens\":[]}");
     }
     
-    // Calculate rough JSON size estimate
-    size_t estimated_size = 1024 + (scan_result->n_tokens * 200);
+    // Size the buffer from token text length, not token count: each token
+    // contributes at most ~170 bytes of fixed JSON plus up to 2 bytes per input
+    // byte once escaped.
+    size_t estimated_size = 1024;
+    for (size_t i = 0; i < scan_result->n_tokens; i++) {
+        PgQuery__ScanToken *token = scan_result->tokens[i];
+        int token_length = token->end - token->start;
+        if (token_length < 0) token_length = 0;
+        estimated_size += (size_t) token_length * 2 + 200;
+    }
     char* json = safe_malloc(estimated_size);
     if (!json) {
         return safe_strdup("{\"version\":0,\"tokens\":[]}");
     }
     
     // Start building JSON
-    int pos = snprintf(json, estimated_size, "{\"version\":%d,\"tokens\":[", scan_result->version);
+    size_t pos = snprintf(json, estimated_size, "{\"version\":%d,\"tokens\":[", scan_result->version);
     
     for (size_t i = 0; i < scan_result->n_tokens; i++) {
         PgQuery__ScanToken *token = scan_result->tokens[i];
@@ -329,25 +337,24 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         const char* keyword_name = get_keyword_name(token->keyword_kind);
         
         // Add comma if not first token
-        if (i > 0) {
-            pos += snprintf(json + pos, estimated_size - pos, ",");
+        if (i > 0 && pos < estimated_size) {
+            int n = snprintf(json + pos, estimated_size - pos, ",");
+            pos += (n > 0) ? (size_t) n : 0;
         }
         
         // Add token object to JSON
-        pos += snprintf(json + pos, estimated_size - pos,
-            "{\"start\":%d,\"end\":%d,\"text\":\"%s\",\"tokenType\":%d,\"tokenName\":\"%s\",\"keywordKind\":%d,\"keywordName\":\"%s\"}",
-            token->start, token->end, escaped_text, token->token, token_name, token->keyword_kind, keyword_name);
+        if (pos < estimated_size) {
+            int n = snprintf(json + pos, estimated_size - pos,
+                "{\"start\":%d,\"end\":%d,\"text\":\"%s\",\"tokenType\":%d,\"tokenName\":\"%s\",\"keywordKind\":%d,\"keywordName\":\"%s\"}",
+                token->start, token->end, escaped_text, token->token, token_name, token->keyword_kind, keyword_name);
+            pos += (n > 0) ? (size_t) n : 0;
+        }
         
         free(token_text);
         free(escaped_text);
         
-        // Check if we're running out of space
-        if (pos >= estimated_size - 200) {
-            char* new_json = realloc(json, estimated_size * 2);
-            if (!new_json) break;
-            json = new_json;
-            estimated_size *= 2;
-        }
+        // snprintf returns the would-be length; never let pos run past the buffer
+        if (pos >= estimated_size) pos = estimated_size - 1;
     }
     
     // Close JSON

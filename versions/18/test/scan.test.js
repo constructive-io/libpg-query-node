@@ -275,5 +275,33 @@ comment */ SELECT 2`;
       assert.ok(commentToken, "should have a C_COMMENT token");
       assert.ok(commentToken.text.includes('\n'), "comment text should preserve newlines");
     });
+
+    it("should handle tokens far larger than the per-token JSON budget", () => {
+      // A single long literal used to overflow the count-based buffer estimate,
+      // truncating the JSON output (and writing past the buffer).
+      for (const length of [1400, 5000, 300000]) {
+        const literal = "a".repeat(length);
+        const sql = `SELECT '${literal}'; SELECT 1; SELECT 2; SELECT 3;`;
+        const result = query.scanSync(sql);
+
+        const sconst = result.tokens.find(t => t.tokenName === "SCONST");
+        assert.ok(sconst, `should have an SCONST token (length ${length})`);
+        assert.equal(sconst.text, `'${literal}'`);
+        assert.equal(result.tokens[result.tokens.length - 1].text, ";");
+        assert.equal(result.tokens.filter(t => t.text === "SELECT").length, 4);
+      }
+    });
+
+    it("should handle many long tokens that need JSON escaping", () => {
+      const literal = ('"\\\n\t').repeat(2000);
+      const sql = `SELECT $$${literal}$$, $$${literal}$$`;
+      const result = query.scanSync(sql);
+
+      const dollarTokens = result.tokens.filter(t => t.text.startsWith("$$"));
+      assert.equal(dollarTokens.length, 2);
+      for (const t of dollarTokens) {
+        assert.equal(t.text, `$$${literal}$$`);
+      }
+    });
   });
 });
