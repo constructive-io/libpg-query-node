@@ -15,7 +15,7 @@
     "distTag": "pg18",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
     "libpgQueryTag": "18-constructive",
-    "libpgQueryCommit": "b0f5f331dc50d69597ec610de7b21afa47a66808",
+    "libpgQueryCommit": "b66cc16ea07eeec340f317b91a93e0cbea7922c0",
     "fullApi": true
   },
   "files": [
@@ -31,7 +31,7 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/pg18.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js"
+    "test": "node --test test/parsing.test.js test/pg18.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js test/wasm-stale-stack.test.js"
   },
   "author": "Constructive <developers@constructive.io>",
   "license": "MIT",

@@ -184,9 +184,14 @@ instantiate();
 function callWasm(fn: () => number): number {
   const proc = (globalThis as any).process;
   const exitCode = proc?.exitCode;
+  const module = wasmModule;
+  const stackPointer = module.stackSave();
   try {
     return fn();
   } catch (error) {
+    // The throw unwound the JS frames but not the C shadow stack; give it
+    // back so later sync calls on this instance do not start half-way down it.
+    module.stackRestore(stackPointer);
     failures++;
     stale = true;
     if (++staleFailures >= MAX_STALE_FAILURES) wasmModule = undefined;
