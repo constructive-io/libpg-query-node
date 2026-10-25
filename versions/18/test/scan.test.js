@@ -358,6 +358,12 @@ describe("scan input limits", () => {
     await assert.rejects(query.scan(sql), /out of WASM memory/);
     assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
   });
+
+  // 6M one-character tokens (20 MB) used to return tokens: [] as well.
+  it("throws for many short tokens instead of returning none", () => {
+    assert.equal(query.scanSync("SELECT 1;\n".repeat(1000000)).tokens.length, 3000000);
+    assert.throws(() => query.scanSync("SELECT 1;\n".repeat(2000000)), /out of WASM memory/);
+  });
 });
 
 describe("scan control characters", () => {
