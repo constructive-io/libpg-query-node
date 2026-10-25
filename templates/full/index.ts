@@ -152,7 +152,8 @@ let replaceError: unknown;
 async function compileWasm(url: string): Promise<WebAssembly.Module> {
   const proc = (globalThis as any).process;
   if (proc?.versions?.node && proc.type !== 'renderer') {
-    return WebAssembly.compile(require('node:fs').readFileSync(url.startsWith('file://') ? new URL(url) : url));
+    const fs = await import('node:fs');
+    return WebAssembly.compile(fs.readFileSync(url.startsWith('file://') ? new URL(url) : url));
   }
   const response = await fetch(url, { credentials: 'same-origin' });
   if (!response.ok) throw new Error(`Failed to load ${url}: HTTP ${response.status}`);
