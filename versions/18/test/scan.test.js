@@ -1,6 +1,7 @@
 const query = require("../");
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 
 describe("Query Scanning", () => {
   before(async () => {
@@ -363,6 +364,34 @@ describe("scan input limits", () => {
   it("throws for many short tokens instead of returning none", () => {
     assert.equal(query.scanSync("SELECT 1;\n".repeat(1000000)).tokens.length, 3000000);
     assert.throws(() => query.scanSync("SELECT 1;\n".repeat(2000000)), /out of WASM memory/);
+  });
+
+  // About 50 MB (18.6M tokens) used to make libpg_query write the token protobuf
+  // through a NULL pointer, abort, and break the next sync call. Runs in a child
+  // process because the abort corrupts the instance.
+  it("throws out of WASM memory at 50 MB, then sync and async calls work", () => {
+    const script = `const query = require(${JSON.stringify(require.resolve("../"))});
+      (async () => {
+        await query.parse("SELECT 1");
+        let message = "no error";
+        try {
+          query.scanSync("SELECT a, b FROM t WHERE c = 1;\\n".repeat(1690000));
+        } catch (error) {
+          message = error.message;
+        }
+        const sync = query.scanSync("SELECT 1").tokens.length;
+        const async = (await query.scan("SELECT 1")).tokens.length;
+        process.stdout.write("\\nresult=" + JSON.stringify({ message, sync, async }));
+      })();`;
+    const output = execFileSync(process.execPath, ["-e", script], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    const result = JSON.parse(output.match(/^result=(.*)$/m)[1]);
+    assert.match(result.message, /out of WASM memory/);
+    assert.equal(result.sync, 2);
+    assert.equal(result.async, 2);
   });
 });
 
