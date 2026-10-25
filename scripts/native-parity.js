@@ -25,8 +25,18 @@ async function main() {
   if (!source) throw new Error(`no libpg_query checkout for ${commit} under ${versionDir}/.cache; run pnpm build first`);
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'libpg-query-native-'));
+  try {
+    await checkParity(versionDir, source, commit, work);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+async function checkParity(versionDir, source, commit, work) {
   execFileSync('sh', ['-c', `git -C "${source}" archive ${commit} | tar -x -C "${work}"`]);
-  execFileSync('make', ['-j', String(os.cpus().length), 'build'], { cwd: work, stdio: ['ignore', 'ignore', 'inherit'] });
+  // glibc >= 2.38 declares strchrnul, which PG <= 14's vendored snprintf.c would otherwise redefine
+  const cppflags = process.platform === 'linux' ? 'CPPFLAGS=-DHAVE_STRCHRNUL=' : 'CPPFLAGS=';
+  execFileSync('make', ['-j', String(os.cpus().length), cppflags, 'build'], { cwd: work, stdio: ['ignore', 'ignore', 'inherit'] });
   const driver = path.join(work, 'parity-driver');
   execFileSync('cc', ['-O2', '-I', work, path.join(__dirname, 'native-parity/driver.c'), path.join(work, 'libpg_query.a'), '-lpthread', '-o', driver]);
 
@@ -66,10 +76,9 @@ async function main() {
     if (a !== b) diffs.push({ key, native: a.slice(0, 300), wasm: b.slice(0, 300) });
   });
 
-  fs.rmSync(work, { recursive: true, force: true });
   console.log(`native parity: ${statements.length} statements from ${files.length} files @ ${commit.slice(0, 7)}, ${diffs.length} differences`);
   for (const d of diffs.slice(0, 10)) console.log(JSON.stringify(d, null, 2));
-  if (diffs.length) process.exit(1);
+  if (diffs.length) process.exitCode = 1;
 }
 
 main().catch((err) => {
