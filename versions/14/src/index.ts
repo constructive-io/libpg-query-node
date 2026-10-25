@@ -142,6 +142,12 @@ let loading: Promise<void> | undefined;
 let failures = 0;
 // Why the last synchronous replacement failed; the next loadModule() retries.
 let replaceError: unknown;
+// A replaced instance is freed only after the current synchronous run yields.
+// At most one that grew past half the 1 GiB heap limit may wait for that, so
+// repeated out-of-memory failures can't pile up gigabytes; small ones (stack
+// overflows on deep nesting) are not limited.
+const LARGE_INSTANCE_BYTES = 512 * 1024 * 1024;
+let largeUnfreed = 0;
 
 // Reads the .wasm file the way the Emscripten loader does: from disk in Node, else with fetch.
 async function compileWasm(url: string): Promise<WebAssembly.Module> {
@@ -202,28 +208,45 @@ function callWasm(fn: () => number): number {
   const exitCode = proc?.exitCode;
   try {
     return fn();
-  } catch (error) {
+  } catch (thrown) {
     failures++;
-    replaceInstance();
-    if (proc) proc.exitCode = exitCode;
-    if (error instanceof Error) throw error;
-    const reason = typeof error === 'object' && error !== null
-      ? ((error as any).message ?? (error as any).constructor?.name)
-      : error;
-    throw new Error(
-      `libpg_query terminated (${reason}), most likely out of WASM memory; parse large inputs in smaller pieces`,
-      { cause: error }
+    const error = thrown instanceof Error ? thrown : new Error(
+      `libpg_query terminated (${describeThrown(thrown)}), most likely out of WASM memory; parse large inputs in smaller pieces`,
+      // A copy: Emscripten's own exit object keeps the whole instance alive.
+      { cause: typeof thrown === 'object' && thrown !== null ? { ...thrown } : thrown }
     );
+    if (wasmModule.HEAPU8.length > LARGE_INSTANCE_BYTES && largeUnfreed++ === 0) {
+      queueMicrotask(() => { largeUnfreed = 0; });
+    }
+    if (largeUnfreed <= 1) {
+      replaceInstance();
+    } else {
+      wasmModule = undefined;
+      replaceError = new Error(
+        'WASM memory limit hit repeatedly in one synchronous run; yield (await) to free memory',
+        { cause: error }
+      );
+    }
+    if (proc) proc.exitCode = exitCode;
+    throw error;
   }
 }
 
+function describeThrown(thrown: unknown) {
+  return typeof thrown === 'object' && thrown !== null
+    ? ((thrown as any).message ?? (thrown as any).constructor?.name)
+    : thrown;
+}
+
 function ensureLoaded() {
-  // A replacement that failed to start is retried here, for callers that never await.
-  if (!wasmModule && compiled) replaceInstance();
   if (wasmModule) return;
-  if (replaceError !== undefined) {
+  // A replacement that was skipped or failed to start is retried here, for callers that never await.
+  if (compiled && largeUnfreed <= 1) {
+    replaceInstance();
+    if (wasmModule) return;
     throw new Error('Could not start a fresh WASM instance after a failed call; await `loadModule()` to retry', { cause: replaceError });
   }
+  if (replaceError !== undefined) throw replaceError;
   throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 

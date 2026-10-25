@@ -42,6 +42,37 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1;\n'.repeat(1000000)).stmts.length, 1000000);
   });
 
+  // Each replaced instance stays allocated until the synchronous run yields.
+  it('stops replacing after repeated out-of-memory failures in one synchronous run, and recovers after an await', () => {
+    const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
+      (async () => {
+        await lib.loadModule();
+        const huge = 'SELECT 1;\\n'.repeat(5000000);
+        const messages = [];
+        let peak = 0;
+        for (let i = 0; i < 10; i++) {
+          try { lib.parseSync(huge); } catch (error) { messages.push(error.message + ' / ' + error.cause?.message); }
+          peak = Math.max(peak, process.memoryUsage().rss);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const after = lib.parseSync('SELECT 1').stmts.length;
+        process.stdout.write('\\nresult=' + JSON.stringify({ messages, peak, after }));
+      })();`;
+    const output = execFileSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const { messages, peak, after } = JSON.parse(output.match(/^result=(.*)$/m)[1]);
+    assert.equal(messages.length, 10);
+    assert.match(messages[0], /out of WASM memory/);
+    assert.match(messages[1], /out of WASM memory/);
+    for (const message of messages.slice(2)) {
+      assert.match(message, /^WASM memory limit hit repeatedly in one synchronous run; yield \(await\) to free memory \/ .*out of WASM memory/);
+    }
+    assert.ok(peak < 2.5 * 1024 ** 3, `peak RSS ${Math.round(peak / 1024 ** 2)} MiB`);
+    assert.equal(after, 1);
+  });
+
   it('frees each replaced instance, so WASM memory stays at one instance', () => {
     const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
       (async () => {
@@ -308,7 +339,7 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
       const caught = await failOnce(name, query, thrown);
       assert.ok(caught instanceof Error);
       assert.match(caught.message, /out of WASM memory/);
-      assert.equal(caught.cause, thrown);
+      assert.deepEqual(caught.cause, thrown);
     });
   }
 });
