@@ -143,78 +143,132 @@ interface WasmModule {
 
 let wasmModule: WasmModule;
 
-// After a WASM call throws, the instance is stale: async calls wait for its
-// replacement, while sync calls, which cannot wait, keep using it until the
-// replacement is ready. One replacement loads at a time; the next call retries
-// a failed load.
-let stale = false;
+// An exception out of a WASM call (V8 stack overflow on deeply nested SQL, a
+// trap, or exit() once the heap limit is hit) skips libpg_query's cleanup and
+// can leave the instance corrupt. callWasm() therefore swaps in a fresh instance
+// before rethrowing. It builds that instance synchronously from the compiled
+// module, so the very next call, sync or async, already runs on a clean one.
+let compiled: WebAssembly.Module | undefined;
 let loading: Promise<void> | undefined;
-// Counts WASM calls that threw, so cleanup skips an instance that threw mid-call.
+// Counts WASM calls that threw, so cleanup skips memory of the replaced instance.
 let failures = 0;
-// Sync calls stop using a stale instance after this many failures on it: past
-// about 45, a stack overflow can make the next one spin forever.
-const MAX_STALE_FAILURES = 10;
-let staleFailures = 0;
+// Why the last synchronous replacement failed; the next loadModule() retries.
+let replaceError: unknown;
+// A replaced instance is freed only after the current synchronous run yields.
+// At most one that grew past half the 1 GiB heap limit may wait for that, so
+// repeated out-of-memory failures can't pile up gigabytes; small ones (stack
+// overflows on deep nesting) are not limited.
+const LARGE_INSTANCE_BYTES = 512 * 1024 * 1024;
+let largeUnfreed = 0;
+
+// Reads the .wasm file the way the Emscripten loader does: from disk in Node, else with fetch.
+async function compileWasm(url: string): Promise<WebAssembly.Module> {
+  const proc = (globalThis as any).process;
+  if (proc?.versions?.node && proc.type !== 'renderer') {
+    const fs = await import('node:fs');
+    return WebAssembly.compile(fs.readFileSync(url.startsWith('file://') ? new URL(url) : url));
+  }
+  const response = await fetch(url, { credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`Failed to load ${url}: HTTP ${response.status}`);
+  return WebAssembly.compile(await response.arrayBuffer());
+}
 
 function instantiate(): Promise<void> {
   if (loading) return loading;
-  const promise = PgQueryModule().then(
-    (module: WasmModule) => {
-      wasmModule = module;
-      stale = false;
-      staleFailures = 0;
-      loading = undefined;
-    },
-    (error: unknown) => {
-      loading = undefined;
-      throw error;
-    }
-  );
+  const promise = (async () => {
+    let wasmUrl: string | undefined;
+    const module: WasmModule = await PgQueryModule({
+      locateFile: (path: string, dir: string) => (wasmUrl = dir + path),
+    });
+    compiled ??= await compileWasm(wasmUrl);
+    wasmModule = module;
+    replaceError = undefined;
+  })();
   loading = promise;
-  // Rejects only for the callers awaiting it.
-  promise.catch(() => {});
+  promise.then(
+    () => { loading = undefined; },
+    () => { loading = undefined; }
+  );
   return promise;
 }
 
-instantiate();
+// Rejects only for the callers awaiting it.
+instantiate().catch(() => {});
 
-// An exception out of a WASM call (V8 stack overflow on deeply nested SQL, a
-// trap, or exit() once the heap limit is hit) skips libpg_query's cleanup and
-// leaves the instance corrupt, so replace it with a fresh one.
+function replaceInstance(): void {
+  let error: unknown = new Error('the WASM loader did not instantiate synchronously');
+  const module: any = {
+    instantiateWasm(imports: WebAssembly.Imports, receive: (instance: WebAssembly.Instance) => void) {
+      try {
+        receive(new WebAssembly.Instance(compiled, imports));
+        error = undefined;
+      } catch (e) {
+        error = e;
+      }
+      return {};
+    },
+  };
+  // receive() sets the exports and memory views, so the instance is usable right
+  // away; the loader runs the rest of its start-up (stdio streams) on a later microtask.
+  PgQueryModule(module).catch(() => {});
+  wasmModule = error === undefined ? module : undefined;
+  replaceError = error;
+}
+
 function callWasm(fn: () => number): number {
   const proc = (globalThis as any).process;
   const exitCode = proc?.exitCode;
   try {
     return fn();
-  } catch (error) {
+  } catch (thrown) {
     failures++;
-    stale = true;
-    if (++staleFailures >= MAX_STALE_FAILURES) wasmModule = undefined;
-    instantiate();
-    if (proc) proc.exitCode = exitCode;
-    if (error instanceof Error) throw error;
-    const reason = typeof error === 'object' && error !== null
-      ? ((error as any).message ?? (error as any).constructor?.name)
-      : error;
-    throw new Error(
-      `libpg_query terminated (${reason}), most likely out of WASM memory; parse large inputs in smaller pieces`,
-      { cause: error }
+    const error = thrown instanceof Error ? thrown : new Error(
+      `libpg_query terminated (${describeThrown(thrown)}), most likely out of WASM memory; parse large inputs in smaller pieces`,
+      // A copy: Emscripten's own exit object keeps the whole instance alive.
+      { cause: typeof thrown === 'object' && thrown !== null ? { ...thrown } : thrown }
     );
+    if (wasmModule.HEAPU8.length > LARGE_INSTANCE_BYTES && largeUnfreed++ === 0) {
+      queueMicrotask(() => { largeUnfreed = 0; });
+    }
+    if (largeUnfreed <= 1) {
+      replaceInstance();
+    } else {
+      wasmModule = undefined;
+      replaceError = new Error(
+        'WASM memory limit hit repeatedly in one synchronous run; yield (await) to free memory',
+        { cause: error }
+      );
+    }
+    if (proc) proc.exitCode = exitCode;
+    throw error;
   }
 }
 
+function describeThrown(thrown: unknown) {
+  return typeof thrown === 'object' && thrown !== null
+    ? ((thrown as any).message ?? (thrown as any).constructor?.name)
+    : thrown;
+}
+
 function ensureLoaded() {
-  if (!wasmModule) throw new Error("WASM module not initialized. Call `loadModule()` first.");
+  if (wasmModule) return;
+  // A replacement that was skipped or failed to start is retried here, for callers that never await.
+  if (compiled && largeUnfreed <= 1) {
+    replaceInstance();
+    if (wasmModule) return;
+    throw new Error('Could not start a fresh WASM instance after a failed call; await `loadModule()` to retry', { cause: replaceError });
+  }
+  if (replaceError !== undefined) throw replaceError;
+  throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 
 export async function loadModule(): Promise<void> {
-  while (!wasmModule || stale) await instantiate();
+  while (!wasmModule) await instantiate();
 }
 
 function awaitInit<T extends (...args: any[]) => Promise<any>>(fn: T): T {
   return (async (...args: Parameters<T>) => {
-    // Re-checked after every await: another call may have failed in between.
-    while (!wasmModule || stale) await instantiate();
+    while (!wasmModule) await instantiate();
     return fn(...args);
   }) as T;
 }
@@ -388,9 +442,7 @@ export const normalize = awaitInit(async (query: string): Promise<string> => {
 
 // Sync versions
 export function parseSync(query: string): ParseResult {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
+  ensureLoaded();
   
   // Input validation
   if (query === null || query === undefined) {
@@ -454,9 +506,7 @@ export function parseSync(query: string): ParseResult {
 }
 
 export function parsePlPgSQLSync(query: string): ParseResult {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
+  ensureLoaded();
   const queryPtr = stringToPtr(query);
   const failuresBefore = failures;
   let resultPtr = 0;
@@ -482,9 +532,7 @@ export function parsePlPgSQLSync(query: string): ParseResult {
 }
 
 export function fingerprintSync(query: string): string {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
+  ensureLoaded();
   const queryPtr = stringToPtr(query);
   const failuresBefore = failures;
   let resultPtr = 0;
@@ -509,9 +557,7 @@ export function fingerprintSync(query: string): string {
 }
 
 export function normalizeSync(query: string): string {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
+  ensureLoaded();
   const queryPtr = stringToPtr(query);
   const failuresBefore = failures;
   let resultPtr = 0;
@@ -560,9 +606,7 @@ export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
 });
 
 export function scanSync(query: string): ScanResult {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
+  ensureLoaded();
   const queryPtr = stringToPtr(query);
   const failuresBefore = failures;
   let resultPtr = 0;
