@@ -323,6 +323,9 @@ describe("scan errors", () => {
         assert.equal(err.name, "SqlError");
         assert.equal(err.message, message);
         assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        assert.equal(typeof err.sqlDetails.fileName, "string");
+        assert.equal(typeof err.sqlDetails.functionName, "string");
+        assert.ok(err.sqlDetails.lineNumber > 0);
         return true;
       });
     });
