@@ -134,6 +134,7 @@ interface WasmModule {
   _wasm_fingerprint: (queryPtr: number) => number;
   _wasm_normalize_query: (queryPtr: number) => number;
   _wasm_scan: (queryPtr: number) => number;
+  _wasm_free_detailed_result: (ptr: number) => void;
   lengthBytesUTF8: (str: string) => number;
   stringToUTF8: (str: string, ptr: number, len: number) => void;
   UTF8ToString: (ptr: number) => string;
@@ -256,6 +257,34 @@ function ptrToString(ptr: number): string {
   return wasmModule.UTF8ToString(ptr);
 }
 
+const NO_RESULT_OUT_OF_MEMORY = 'libpg_query returned no result: out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces';
+
+function readDetailedResult(resultPtr: number): string {
+  if (!resultPtr) {
+    throw new Error(NO_RESULT_OUT_OF_MEMORY);
+  }
+  const ptrAt = (offset: number) => wasmModule.getValue(resultPtr + offset, 'i32');
+  const str = (ptr: number) => (ptr ? wasmModule.UTF8ToString(ptr) : undefined);
+  if (ptrAt(0)) {
+    const message = str(ptrAt(4)) ?? 'Unknown error';
+    // libpg_query reports a failed malloc as a plain "out of memory" error.
+    if (message === 'out of memory') {
+      throw new Error(NO_RESULT_OUT_OF_MEMORY);
+    }
+    const lineno = ptrAt(16);
+    const cursorpos = ptrAt(20);
+    throw new SqlError(message, {
+      message,
+      cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0,
+      fileName: str(ptrAt(12)),
+      functionName: str(ptrAt(8)),
+      lineNumber: lineno > 0 ? lineno : undefined,
+      context: str(ptrAt(24))
+    });
+  }
+  return str(ptrAt(28)) ?? '';
+}
+
 export const parse = awaitInit(async (query: string): Promise<ParseResult> => {
   // Input validation
   if (query === null || query === undefined) {
@@ -350,18 +379,14 @@ export const fingerprint = awaitInit(async (query: string): Promise<string> => {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return resultStr;
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
@@ -374,18 +399,14 @@ export const normalize = awaitInit(async (query: string): Promise<string> => {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return resultStr;
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
@@ -496,18 +517,14 @@ export function fingerprintSync(query: string): string {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return resultStr;
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
@@ -523,18 +540,14 @@ export function normalizeSync(query: string): string {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return resultStr;
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
@@ -547,18 +560,14 @@ export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return JSON.parse(resultStr);
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
@@ -574,18 +583,14 @@ export function scanSync(query: string): ScanResult {
   
   try {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    const resultStr = readDetailedResult(resultPtr);
     
     return JSON.parse(resultStr);
   } finally {
     if (failures === failuresBefore) {
       wasmModule._free(queryPtr);
       if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
+        wasmModule._wasm_free_detailed_result(resultPtr);
       }
     }
   }
