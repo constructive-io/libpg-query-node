@@ -190,55 +190,34 @@ npm install libpg-query@pg18   # full API
 npm install libpg-query@pg17   # parse only
 ```
 
-## Low-Memory Variants (pg18-lowmem-*)
+## WASM memory defaults
 
-Special opt-in builds with a smaller WebAssembly memory floor, published under
-dedicated dist-tags so they can never affect `latest` or `pg18`. The Makefiles
-accept overrides (defaults unchanged: 128MiB initial / 1GiB max / 32MiB stack):
+Every major builds with `WASM_INITIAL_MEMORY=41943040` (40MiB),
+`WASM_STACK_SIZE=33554432` (32MiB) and `WASM_MAXIMUM_MEMORY=1073741824` (1GiB),
+set in `templates/Makefile.template`. The initial size is only the floor: the
+heap grows on demand up to the maximum, so it decides the idle footprint of a
+parser instance (about 42MiB of V8 `external` memory), not the largest input it
+can parse. The 32MiB stack is what prevents deep-recursion traps, and untouched
+stack pages cost no resident memory, so it is never lowered.
 
-| Tag              | WASM_INITIAL_MEMORY | WASM_STACK_SIZE |
-|------------------|---------------------|-----------------|
-| `pg18-lowmem-16` | 16777216 (16MiB)    | 4194304 (4MiB)  |
-| `pg18-lowmem-32` | 33554432 (32MiB)    | 8388608 (8MiB)  |
-| `pg18-lowmem-64` | 67108864 (64MiB)    | 33554432 (32MiB, default) |
-
-Note: `INITIAL_MEMORY` must exceed `STACK_SIZE` + static data (~2.5MiB), which
-is why the smaller floors also lower the stack. A smaller stack only limits
-extremely deep expression nesting (depth 5000 still parses on the 4MiB stack).
-
-### Exact publish steps (per variant)
+There are no separate low-memory releases. If a downstream user needs an ad-hoc
+build with a different floor, override it on the build line and keep the stack:
 
 ```bash
-# 1. Start clean — the working tree must have no uncommitted changes
-git status
-
-cd versions/18
-
-# 2. Set a prerelease version so it can never shadow a normal release.
-#    Pattern: <current-version>-lowmem-<floor>.<n>   e.g. 18.1.5-lowmem-32.0
-npm version 18.1.5-lowmem-32.0 --no-git-tag-version
-
-# 3. Build the wasm with the memory overrides (32MiB floor shown)
-pnpm wasm:clean
-pnpm wasm:make build WASM_INITIAL_MEMORY=33554432 WASM_STACK_SIZE=8388608
-pnpm build:js
-
-# 4. Test against the variant build
-pnpm test
-
-# 5. Publish under the variant tag (TAG overrides x-publish.distTag)
-TAG=pg18-lowmem-32 pnpm run publish:pkg
-
-# 6. IMPORTANT: revert the version bump and rebuild the default wasm so the
-#    working tree is back to the normal publish state
-git checkout -- package.json
-pnpm build
-
-# 7. Verify the tags: latest/pg18 must be untouched
-npm dist-tag ls libpg-query
+pnpm wasm:make build WASM_INITIAL_MEMORY=50331648   # 48MiB floor; never set WASM_STACK_SIZE below 33554432
 ```
 
-Consumers install with e.g. `npm install libpg-query@pg18-lowmem-32`.
+### Later, separate step: retire the `pg18-lowmem-*` dist-tags
+
+The `pg18-lowmem-16/-32/-64` tags point at pre-`18.2.x` builds with 4/8MiB
+stacks. Do this only after downstream users (Supabase) have been notified; it
+is not part of a release:
+
+```bash
+npm dist-tag rm libpg-query pg18-lowmem-16
+npm dist-tag rm libpg-query pg18-lowmem-32
+npm dist-tag rm libpg-query pg18-lowmem-64
+```
 
 ## Parser Package (@pgsql/parser)
 

@@ -7,9 +7,11 @@ WASM_OUT_DIR := wasm
 WASM_OUT_NAME := libpg-query
 WASM_MODULE_NAME := PgQueryModule
 
-# WASM memory configuration (bytes). Override on the make command line for
-# low-memory variants, e.g. `make build WASM_INITIAL_MEMORY=33554432` (32MiB).
-WASM_INITIAL_MEMORY ?= 134217728
+# WASM memory configuration (bytes). INITIAL_MEMORY is only the floor: the heap
+# grows on demand up to MAXIMUM_MEMORY, so it sets the idle footprint, not the
+# largest input. It must exceed STACK_SIZE + ~2.5MiB of static data. The stack
+# is what prevents deep-recursion traps; keep it at 32MiB.
+WASM_INITIAL_MEMORY ?= 41943040
 WASM_MAXIMUM_MEMORY ?= 1073741824
 WASM_STACK_SIZE ?= 33554432
 

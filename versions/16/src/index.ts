@@ -300,7 +300,7 @@ export const parse = awaitInit(async (query: string) => {
     }
     
     if (!parseTreePtr) {
-      throw new Error('Parse result is null');
+      throw new Error('libpg_query returned no parse tree: out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces');
     }
     
     const parseTree = wasmModule.UTF8ToString(parseTreePtr);
@@ -372,7 +372,7 @@ export function parseSync(query: string) {
     }
     
     if (!parseTreePtr) {
-      throw new Error('Parse result is null');
+      throw new Error('libpg_query returned no parse tree: out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces');
     }
     
     const parseTree = wasmModule.UTF8ToString(parseTreePtr);
