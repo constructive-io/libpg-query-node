@@ -252,14 +252,20 @@ function ptrToString(ptr: number): string {
   return wasmModule.UTF8ToString(ptr);
 }
 
+const NO_RESULT_OUT_OF_MEMORY = 'libpg_query returned no result: out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces';
+
 function readDetailedResult(resultPtr: number): string {
   if (!resultPtr) {
-    throw new Error('libpg_query returned no result: out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces');
+    throw new Error(NO_RESULT_OUT_OF_MEMORY);
   }
   const ptrAt = (offset: number) => wasmModule.getValue(resultPtr + offset, 'i32');
   const str = (ptr: number) => (ptr ? wasmModule.UTF8ToString(ptr) : undefined);
   if (ptrAt(0)) {
     const message = str(ptrAt(4)) ?? 'Unknown error';
+    // libpg_query reports a failed malloc as a plain "out of memory" error.
+    if (message === 'out of memory') {
+      throw new Error(NO_RESULT_OUT_OF_MEMORY);
+    }
     const lineno = ptrAt(16);
     const cursorpos = ptrAt(20);
     throw new SqlError(message, {
