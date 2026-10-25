@@ -78,7 +78,13 @@ describe("normalize errors", () => {
   const failing = [
     ["select percentile_cont(p order by p) within group (order by x) from t", "cannot use multiple ORDER BY clauses with WITHIN GROUP"],
     ["CREATE TABLE p (a int) PARTITION BY MAGIC (a)", 'unrecognized partitioning strategy "magic"'],
+    ['SELECT "x', "unterminated quoted identifier at or near \"\"x\""],
   ];
+
+  it("throws SqlError for empty input", async () => {
+    assert.throws(() => query.normalizeSync(""), { name: "SqlError", message: /^Invalid input/ });
+    await assert.rejects(query.normalize(""), { name: "SqlError", message: /^Invalid input/ });
+  });
 
   for (const [sql, message] of failing) {
     it(`normalizeSync throws SqlError for ${sql}`, () => {

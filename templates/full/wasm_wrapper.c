@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 static int validate_input(const char* input) {
     return input != NULL && strlen(input) > 0;
@@ -208,9 +209,11 @@ static WasmDetailedResult* detailed_set_message(WasmDetailedResult* result, cons
     return result;
 }
 
+// Out of memory returns NULL, which the JS side reports as out of WASM memory.
 static WasmDetailedResult* detailed_set_data(WasmDetailedResult* result, char* data) {
     if (!data) {
-        return detailed_set_message(result, "Memory allocation failed");
+        wasm_free_detailed_result(result);
+        return NULL;
     }
     result->data = data;
     result->data_len = strlen(data);
@@ -231,7 +234,7 @@ WasmDetailedResult* wasm_fingerprint(const char* input) {
     if (fingerprint_result.error) {
         detailed_set_error(result, fingerprint_result.error);
     } else {
-        detailed_set_data(result, safe_strdup(fingerprint_result.fingerprint_str));
+        result = detailed_set_data(result, safe_strdup(fingerprint_result.fingerprint_str));
     }
     pg_query_free_fingerprint_result(fingerprint_result);
     return result;
@@ -251,7 +254,7 @@ WasmDetailedResult* wasm_normalize_query(const char* input) {
     if (normalize_result.error) {
         detailed_set_error(result, normalize_result.error);
     } else {
-        detailed_set_data(result, safe_strdup(normalize_result.normalized_query));
+        result = detailed_set_data(result, safe_strdup(normalize_result.normalized_query));
     }
     pg_query_free_normalize_result(normalize_result);
     return result;
@@ -293,9 +296,10 @@ static const char* get_keyword_name(PgQuery__KeywordKind keyword_kind) {
     }
 }
 
+// Returns NULL when out of memory: a partial token list must never pass as a result.
 static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* original_sql) {
     if (!scan_result || !original_sql) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return NULL;
     }
     
     // Size the buffer from token text length, not token count: each token
@@ -306,11 +310,14 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         PgQuery__ScanToken *token = scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
+        if ((size_t) token_length > (SIZE_MAX - 200 - estimated_size) / 6) {
+            return NULL;
+        }
         estimated_size += (size_t) token_length * 6 + 200;
     }
     char* json = safe_malloc(estimated_size);
     if (!json) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return NULL;
     }
     
     // Start building JSON
@@ -323,8 +330,11 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0; // Safety check
         
-        char* token_text = safe_malloc(token_length + 1);
-        if (!token_text) continue;
+        char* token_text = safe_malloc((size_t) token_length + 1);
+        if (!token_text) {
+            free(json);
+            return NULL;
+        }
         
         if (token_length > 0) {
             strncpy(token_text, &original_sql[token->start], token_length);
@@ -332,10 +342,11 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         token_text[token_length] = '\0';
         
         // Escape token text for JSON
-        char* escaped_text = safe_malloc(token_length * 6 + 1);
+        char* escaped_text = safe_malloc((size_t) token_length * 6 + 1);
         if (!escaped_text) {
             free(token_text);
-            continue;
+            free(json);
+            return NULL;
         }
         
         int escaped_pos = 0;
@@ -413,13 +424,14 @@ WasmDetailedResult* wasm_scan(const char* input) {
         NULL, scan_result.pbuf.len, (void *) scan_result.pbuf.data);
     if (!unpacked) {
         pg_query_free_scan_result(scan_result);
-        return detailed_set_message(result, "Failed to unpack scan result");
+        wasm_free_detailed_result(result);
+        return NULL;
     }
 
-    detailed_set_data(result, build_scan_json(unpacked, input));
+    char* json = build_scan_json(unpacked, input);
     pg_query__scan_result__free_unpacked(unpacked, NULL);
     pg_query_free_scan_result(scan_result);
-    return result;
+    return detailed_set_data(result, json);
 }
 
 EMSCRIPTEN_KEEPALIVE

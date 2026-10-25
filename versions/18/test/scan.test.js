@@ -340,6 +340,26 @@ describe("scan errors", () => {
   }
 });
 
+describe("scan input limits", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  it("throws SqlError for empty input", async () => {
+    assert.throws(() => query.scanSync(""), { name: "SqlError", message: /^Invalid input/ });
+    await assert.rejects(query.scan(""), { name: "SqlError", message: /^Invalid input/ });
+  });
+
+  // About 11 MB: the token JSON no longer fits in the 1 GiB heap. This used to
+  // return { version: 0, tokens: [] } instead of throwing.
+  it("throws when the token JSON does not fit in WASM memory, then recovers", async () => {
+    const sql = "SELECT a, b FROM t WHERE c = 1;\n".repeat(360000);
+    assert.throws(() => query.scanSync(sql), /out of WASM memory/);
+    await assert.rejects(query.scan(sql), /out of WASM memory/);
+    assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
+  });
+});
+
 describe("scan control characters", () => {
   before(async () => {
     await query.parse("SELECT 1");
