@@ -303,5 +303,11 @@ comment */ SELECT 2`;
         assert.equal(t.text, `$$${literal}$$`);
       }
     });
+
+    it("throws instead of returning no tokens when the result does not fit in memory", () => {
+      const sql = "SELECT 1;\n".repeat(2000000);
+      assert.throws(() => query.scanSync(sql), /out of memory/);
+      assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
+    });
   });
 });

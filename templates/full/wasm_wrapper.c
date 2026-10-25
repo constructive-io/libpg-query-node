@@ -283,7 +283,7 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
     }
     char* json = safe_malloc(estimated_size);
     if (!json) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return NULL;
     }
     
     // Start building JSON
@@ -297,7 +297,10 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         if (token_length < 0) token_length = 0; // Safety check
         
         char* token_text = safe_malloc(token_length + 1);
-        if (!token_text) continue;
+        if (!token_text) {
+            free(json);
+            return NULL;
+        }
         
         if (token_length > 0) {
             strncpy(token_text, &original_sql[token->start], token_length);
@@ -308,7 +311,8 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         char* escaped_text = safe_malloc(token_length * 2 + 1);
         if (!escaped_text) {
             free(token_text);
-            continue;
+            free(json);
+            return NULL;
         }
         
         int escaped_pos = 0;
@@ -393,7 +397,7 @@ char* wasm_scan(const char* input) {
     pg_query__scan_result__free_unpacked(scan_result, NULL);
     pg_query_free_scan_result(result);
     
-    return json_result ? json_result : safe_strdup("{\"version\":0,\"tokens\":[]}");
+    return json_result ? json_result : safe_strdup("ERROR: out of memory building the scan result");
 }
 
 EMSCRIPTEN_KEEPALIVE
