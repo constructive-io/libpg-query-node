@@ -537,8 +537,8 @@ export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
+    if (!resultStr.startsWith('{')) {
+      throw new SqlError(resultStr);
     }
     
     return JSON.parse(resultStr);
@@ -564,8 +564,8 @@ export function scanSync(query: string): ScanResult {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
+    if (!resultStr.startsWith('{')) {
+      throw new SqlError(resultStr);
     }
     
     return JSON.parse(resultStr);

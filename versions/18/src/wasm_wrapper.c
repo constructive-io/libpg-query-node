@@ -279,14 +279,14 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
     }
     
     // Size the buffer from token text length, not token count: each token
-    // contributes at most ~170 bytes of fixed JSON plus up to 2 bytes per input
-    // byte once escaped.
+    // contributes at most ~170 bytes of fixed JSON plus up to 6 bytes per input
+    // byte once escaped (\u00XX for control characters).
     size_t estimated_size = 1024;
     for (size_t i = 0; i < scan_result->n_tokens; i++) {
         PgQuery__ScanToken *token = scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
-        estimated_size += (size_t) token_length * 2 + 200;
+        estimated_size += (size_t) token_length * 6 + 200;
     }
     char* json = safe_malloc(estimated_size);
     if (!json) {
@@ -312,7 +312,7 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         token_text[token_length] = '\0';
         
         // Escape token text for JSON
-        char* escaped_text = safe_malloc(token_length * 2 + 1);
+        char* escaped_text = safe_malloc(token_length * 6 + 1);
         if (!escaped_text) {
             free(token_text);
             continue;
@@ -333,6 +333,8 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
             } else if (c == '\t') {
                 escaped_text[escaped_pos++] = '\\';
                 escaped_text[escaped_pos++] = 't';
+            } else if ((unsigned char) c < 0x20) {
+                escaped_pos += sprintf(escaped_text + escaped_pos, "\\u%04x", (unsigned char) c);
             } else {
                 escaped_text[escaped_pos++] = c;
             }

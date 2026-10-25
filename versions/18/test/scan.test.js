@@ -303,5 +303,21 @@ comment */ SELECT 2`;
         assert.equal(t.text, `$$${literal}$$`);
       }
     });
+
+    it("should escape control characters in token text", () => {
+      for (const c of ["\x01", "\b", "\f", "\x1f"]) {
+        const sql = `SELECT 'a${c}b', $$${c}$$`;
+        const result = query.scanSync(sql);
+        assert.deepEqual(result.tokens.map(t => t.text), ["SELECT", `'a${c}b'`, ",", `$$${c}$$`]);
+      }
+    });
+
+    it("should throw SqlError for input the lexer rejects", async () => {
+      for (const sql of ["SELECT 'unterminated", "SELECT $$x", "SELECT /* x", ""]) {
+        assert.throws(() => query.scanSync(sql), query.SqlError, JSON.stringify(sql));
+        await assert.rejects(query.scan(sql), query.SqlError, JSON.stringify(sql));
+      }
+      assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
+    });
   });
 });
