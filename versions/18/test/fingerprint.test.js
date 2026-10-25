@@ -40,6 +40,13 @@ describe("Query Fingerprinting", () => {
     it("should fail on invalid queries", () => {
       assert.throws(() => query.fingerprintSync("NOT A QUERY"), Error);
     });
+
+    // Lexer errors and empty input used to come back as the fingerprint.
+    it("should throw lexer errors and empty input instead of returning them", async () => {
+      assert.throws(() => query.fingerprintSync("SELECT 'abc"), /^Error: unterminated quoted string/);
+      await assert.rejects(query.fingerprint("SELECT 1e"), /^Error: trailing junk after numeric literal/);
+      assert.throws(() => query.fingerprintSync(""), /^Error: Invalid input/);
+    });
   });
 
   describe("Async Fingerprinting", () => {

@@ -226,6 +226,22 @@ describe("Query Scanning", () => {
       assert.ok(result1.version > 0);
     });
 
+    // These used to surface as a JSON SyntaxError on the error message.
+    it("should throw lexer errors as an Error with the lexer's message", async () => {
+      assert.throws(() => query.scanSync("SELECT 'abc"), /^Error: unterminated quoted string/);
+      await assert.rejects(query.scan("SELECT $$x"), /^Error: unterminated dollar-quoted string/);
+      assert.throws(() => query.scanSync(""), /^Error: Invalid input/);
+    });
+
+    // About 11 MB: the token JSON no longer fits in the 1 GiB heap. This used to
+    // return { version: 0, tokens: [] } instead of throwing.
+    it("should throw when the token JSON does not fit in WASM memory", async () => {
+      const sql = "SELECT a, b FROM t WHERE c = 1;\n".repeat(360000);
+      assert.throws(() => query.scanSync(sql), /out of WASM memory/);
+      await assert.rejects(query.scan(sql), /out of WASM memory/);
+      assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
+    });
+
     it("should handle multi-line dollar-quoted strings without JSON errors", () => {
       // Without the fix, scanSync throws:
       //   "Bad control character in string literal"

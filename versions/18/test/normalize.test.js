@@ -42,6 +42,13 @@ describe("Query Normalization", () => {
     it("should fail on invalid queries", () => {
       assert.throws(() => query.normalizeSync("NOT A QUERY"), Error);
     });
+
+    // Lexer errors and empty input used to come back as the normalized query.
+    it("should throw lexer errors and empty input instead of returning them", async () => {
+      assert.throws(() => query.normalizeSync("SELECT 'abc"), /^Error: unterminated quoted string/);
+      await assert.rejects(query.normalize('SELECT "x'), /^Error: unterminated quoted identifier/);
+      assert.throws(() => query.normalizeSync(""), /^Error: Invalid input/);
+    });
   });
 
   describe("Async Normalization", () => {
