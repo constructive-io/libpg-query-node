@@ -1,9 +1,20 @@
 #include "pg_query.h"
 #include "protobuf/pg_query.pb-c.h"
 #include <emscripten.h>
+#include <emscripten/stack.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+/* libpg_query's check_stack_depth() needs a reference point and a limit per
+ * entry: the shadow stack left after the previous call, minus a 512 KiB
+ * margin for the frames between here and the recursion. */
+extern void pg_query_set_stack_limit(size_t bytes) __attribute__((weak));
+static void set_stack_guard(void) {
+    if (!pg_query_set_stack_limit) return; /* libpg_query without the guard (upstream pins) */
+    size_t free_bytes = emscripten_stack_get_free();
+    pg_query_set_stack_limit(free_bytes > 524288 ? free_bytes - 524288 : 0);
+}
 
 static int validate_input(const char* input) {
     return input != NULL && strlen(input) > 0;
@@ -28,6 +39,7 @@ static void* safe_malloc(size_t size) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_parse_query(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -47,6 +59,7 @@ char* wasm_parse_query(const char* input) {
 
 EMSCRIPTEN_KEEPALIVE
 PgQueryParseResult* wasm_parse_query_raw(const char* input) {
+    set_stack_guard();
     PgQueryParseResult* result = (PgQueryParseResult*)malloc(sizeof(PgQueryParseResult));
     if (!result) {
         return NULL;
@@ -66,6 +79,7 @@ void wasm_free_parse_result(PgQueryParseResult* result) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_parse_plpgsql(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -106,6 +120,7 @@ char* wasm_parse_plpgsql(const char* input) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_fingerprint(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -125,6 +140,7 @@ char* wasm_fingerprint(const char* input) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_normalize_query(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -165,6 +181,7 @@ typedef struct {
 
 EMSCRIPTEN_KEEPALIVE
 WasmDetailedResult* wasm_parse_query_detailed(const char* input) {
+    set_stack_guard();
     WasmDetailedResult* result = safe_malloc(sizeof(WasmDetailedResult));
     if (!result) {
         return NULL;
@@ -365,6 +382,7 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_scan(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
