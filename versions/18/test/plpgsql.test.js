@@ -37,6 +37,14 @@ describe("PL/pgSQL Parsing", () => {
       assert.ok(result.plpgsql_funcs.length > 0);
     });
 
+    it("parses a BEGIN ATOMIC SQL function, which has no body string, without aborting", () => {
+      const result = query.parsePlPgSQLSync(
+        "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END"
+      );
+      assert.ok(Array.isArray(result.plpgsql_funcs));
+      assert.equal(query.parseSync("SELECT 1").stmts.length, 1);
+    });
+
     it("should fail on invalid PL/pgSQL", () => {
       assert.throws(() => query.parsePlPgSQLSync("NOT A FUNCTION"), Error);
     });
