@@ -67,3 +67,35 @@ describe("Query Normalization", () => {
     });
   });
 });
+
+describe("normalize errors", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  // Errors raised outside the grammar's "syntax error" path used to come back
+  // as the normalize result instead of being thrown.
+  const failing = [
+    ["select percentile_cont(p order by p) within group (order by x) from t", "cannot use multiple ORDER BY clauses with WITHIN GROUP"],
+    ["CREATE TABLE p (a int) PARTITION BY MAGIC (a)", 'unrecognized partitioning strategy "magic"'],
+  ];
+
+  for (const [sql, message] of failing) {
+    it(`normalizeSync throws SqlError for ${sql}`, () => {
+      assert.throws(() => query.normalizeSync(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        return true;
+      });
+    });
+
+    it(`normalize rejects with SqlError for ${sql}`, async () => {
+      await assert.rejects(query.normalize(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        return true;
+      });
+    });
+  }
+});

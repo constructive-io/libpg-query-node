@@ -305,3 +305,47 @@ comment */ SELECT 2`;
     });
   });
 });
+
+describe("scan errors", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  // Scanner errors used to surface as a JSON.parse SyntaxError on the message.
+  const failing = [
+    ["SELECT 'abc", "unterminated quoted string at or near \"'abc\""],
+    ["SELECT $$x", "unterminated dollar-quoted string at or near \"$$x\""],
+  ];
+
+  for (const [sql, message] of failing) {
+    it(`scanSync throws SqlError for ${sql}`, () => {
+      assert.throws(() => query.scanSync(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        return true;
+      });
+    });
+
+    it(`scan rejects with SqlError for ${sql}`, async () => {
+      await assert.rejects(query.scan(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        return true;
+      });
+    });
+  }
+});
+
+describe("scan control characters", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  it("escapes control characters in token text", () => {
+    const sql = "SELECT E'a\u0002b'";
+    const result = query.scanSync(sql);
+    const literal = result.tokens.find((t) => t.tokenName === "SCONST");
+    assert.equal(literal.text, "E'a\u0002b'");
+  });
+});
