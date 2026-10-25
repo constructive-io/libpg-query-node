@@ -133,6 +133,8 @@ interface WasmModule {
   UTF8ToString: (ptr: number) => string;
   getValue: (ptr: number, type: string) => number;
   HEAPU8: Uint8Array;
+  stackSave: () => number;
+  stackRestore: (ptr: number) => void;
 }
 
 let wasmModule: WasmModule;
