@@ -15,7 +15,7 @@
     "distTag": "pg17",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
     "libpgQueryTag": "17-constructive",
-    "libpgQueryCommit": "ab619b807feea69fdaaa4ea1516236b575bc6d1d"
+    "libpgQueryCommit": "b5c9e69d4b7eed51fbd7d48af3b2b0cfe26f20da"
   },
   "files": [
     "wasm/*"
