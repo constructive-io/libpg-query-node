@@ -1,6 +1,6 @@
 {
   "name": "@pgsql/parser",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "author": "Constructive <developers@constructive.io>",
   "description": "Multi-version PostgreSQL parser with dynamic version selection",
   "main": "./wasm/index.cjs",
