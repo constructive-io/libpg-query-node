@@ -129,6 +129,7 @@ export function hasSqlDetails(error: any): error is Error & { sqlDetails: SqlErr
 // can leave the instance corrupt. callWasm() therefore swaps in a fresh instance
 // before rethrowing. It builds that instance synchronously from the compiled
 // module, so the very next call, sync or async, already runs on a clean one.
+// Also set by loadModule({ wasm }), so no instance ever needs the .wasm file.
 let compiled: WebAssembly.Module | undefined;
 let loading: Promise<void> | undefined;
 // Counts WASM calls that threw, so cleanup skips memory of the replaced instance.
@@ -157,6 +158,12 @@ async function compileWasm(url: string): Promise<WebAssembly.Module> {
 function instantiate(): Promise<void> {
   if (loading) return loading;
   const promise = (async () => {
+    // Set by loadModule({ wasm }), or by an earlier load from the file.
+    if (compiled) {
+      replaceInstance();
+      if (!wasmModule) throw replaceError;
+      return;
+    }
     let wasmUrl: string | undefined;
     const module: any = await PgQueryModule({
       locateFile: (path: string, dir: string) => (wasmUrl = dir + path),
@@ -248,7 +255,35 @@ function ensureLoaded() {
   throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 
-export async function loadModule() {
+type WasmCompiledModule = typeof globalThis extends {
+  WebAssembly: { Module: new (...args: any[]) => infer M }
+} ? M : never;
+
+export interface LoadModuleOptions {
+  /**
+   * The contents of `libpg-query.wasm`, or the module compiled from them, for
+   * hosts where the wrapper cannot read the file itself (a custom protocol
+   * without fetch support, a bundle that inlines assets). Every later instance,
+   * including replacements after a failed call, is created from it.
+   */
+  wasm?: ArrayBuffer | ArrayBufferView | WasmCompiledModule;
+}
+
+// A rest parameter keeps loadModule.length at 0, so `before(loadModule)` is not
+// mistaken for a callback-style hook by test runners.
+export async function loadModule(...args: [options?: LoadModuleOptions]): Promise<void> {
+  const wasm = args[0]?.wasm;
+  if (wasm !== undefined) {
+    const module = wasm instanceof WebAssembly.Module
+      ? wasm
+      : await WebAssembly.compile(wasm as ArrayBuffer | ArrayBufferView);
+    // An instance loaded from the file, or still loading, is replaced by one from `wasm`.
+    await loading?.catch(() => {});
+    compiled = module;
+    replaceInstance();
+    if (!wasmModule) throw replaceError;
+    return;
+  }
   while (!wasmModule) await instantiate();
 }
 

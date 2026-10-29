@@ -185,6 +185,18 @@ const result = parseSync('SELECT * FROM users');
 
 Note: We recommend using async methods as they handle initialization automatically. Use sync methods only when necessary, and always call `loadModule()` first.
 
+### `loadModule({ wasm }): Promise<void>`
+
+For hosts where the wrapper cannot read `libpg-query.wasm` itself (for example a custom protocol without fetch support), pass the file's bytes or a compiled `WebAssembly.Module`. It is compiled once, and every later instance is created from it. Pass only the `libpg-query.wasm` shipped with this package (or bytes you trust as much): whatever you pass runs as the parser.
+
+```typescript
+import { loadModule, parseSync } from 'libpg-query';
+import wasm from 'libpg-query/wasm/libpg-query.wasm'; // bytes, via your bundler's binary loader
+
+await loadModule({ wasm });
+const result = parseSync('SELECT * FROM users');
+```
+
 ### Type Definitions
 
 ```typescript

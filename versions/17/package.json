@@ -30,7 +30,7 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js test/wasm-stale-stack.test.js"
+    "test": "node --test test/parsing.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js test/wasm-stale-stack.test.js test/load-module.test.js"
   },
   "author": "Constructive <developers@constructive.io>",
   "license": "MIT",
