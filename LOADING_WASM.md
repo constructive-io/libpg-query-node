@@ -30,3 +30,5 @@ import { loadModule } from 'libpg-query';
 
 await loadModule({ wasm: bytes }); // ArrayBuffer, typed array, or a compiled WebAssembly.Module
 ```
+
+Pass only the `libpg-query.wasm` shipped with the package (or bytes you trust as much): whatever you pass runs as the parser.

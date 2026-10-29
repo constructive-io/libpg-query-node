@@ -1,10 +1,11 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const WASM = path.join(__dirname, '../wasm/libpg-query.wasm');
+const RESULT = 'RESULT ';
 
 // Runs `body` in a fresh process whose copy of the wrapper has no
 // libpg-query.wasm next to it, like a host that cannot read its own files.
@@ -20,16 +21,21 @@ function withoutWasmFile(body) {
       const bytes = fs.readFileSync(${JSON.stringify(WASM)});
       const DEEP = 'SELECT 1' + '+1'.repeat(100000);
       (async () => { ${body} })().then(
-        (result) => console.log(JSON.stringify(result)),
-        (error) => { console.log(JSON.stringify({ error: String(error && error.message || error) })); }
+        (result) => console.log(${JSON.stringify(RESULT)} + JSON.stringify(result)),
+        (error) => { console.log(${JSON.stringify(RESULT)} + JSON.stringify({ error: String(error && error.message || error) })); }
       );
     `;
-    const out = execFileSync(process.execPath, ['--max-old-space-size=4096', '-e', script], {
+    const run = spawnSync(process.execPath, ['--max-old-space-size=4096', '-e', script], {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 * 1024 * 1024,
       timeout: 120000,
     });
-    return JSON.parse(out.trim().split('\n').pop());
+    const line = (run.stdout || '').split('\n').reverse().find((l) => l.startsWith(RESULT));
+    if (!line) {
+      const how = run.error ? run.error.message : run.signal ? `signal ${run.signal}` : `exit ${run.status}`;
+      throw new Error(`child process gave no result (${how}):\n${(run.stderr || '').slice(-4000)}`);
+    }
+    return JSON.parse(line.slice(RESULT.length));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -187,7 +187,7 @@ Note: We recommend using async methods as they handle initialization automatical
 
 ### `loadModule({ wasm }): Promise<void>`
 
-For hosts where the wrapper cannot read `libpg-query.wasm` itself (for example a custom protocol without fetch support), pass the file's bytes or a compiled `WebAssembly.Module`. It is compiled once, and every later instance is created from it.
+For hosts where the wrapper cannot read `libpg-query.wasm` itself (for example a custom protocol without fetch support), pass the file's bytes or a compiled `WebAssembly.Module`. It is compiled once, and every later instance is created from it. Pass only the `libpg-query.wasm` shipped with this package (or bytes you trust as much): whatever you pass runs as the parser.
 
 ```typescript
 import { loadModule, parseSync } from 'libpg-query';
