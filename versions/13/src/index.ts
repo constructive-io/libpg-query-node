@@ -149,6 +149,9 @@ let replaceError: unknown;
 const LARGE_INSTANCE_BYTES = 512 * 1024 * 1024;
 let largeUnfreed = 0;
 
+// Set once the host hands over the .wasm itself; the wrapper then never reads the file.
+let wasmProvided = false;
+
 // Reads the .wasm file the way the Emscripten loader does: from disk in Node, else with fetch.
 async function compileWasm(url: string): Promise<WebAssembly.Module> {
   const proc = (globalThis as any).process;
@@ -164,11 +167,20 @@ async function compileWasm(url: string): Promise<WebAssembly.Module> {
 function instantiate(): Promise<void> {
   if (loading) return loading;
   const promise = (async () => {
+    if (wasmProvided) {
+      // Same yield as for callers of the default loader, so a capped out-of-memory run is freed first.
+      await undefined;
+      startProvidedInstance();
+      return;
+    }
     let wasmUrl: string | undefined;
     const module: any = await PgQueryModule({
       locateFile: (path: string, dir: string) => (wasmUrl = dir + path),
     });
+    // loadModule({ wasm }) may have finished while the file was loading; keep its instance.
+    if (wasmProvided) return;
     compiled ??= await compileWasm(wasmUrl);
+    if (wasmProvided) return;
     wasmModule = module;
     replaceError = undefined;
   })();
@@ -255,7 +267,36 @@ function ensureLoaded() {
   throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 
-export async function loadModule() {
+type WasmCompiledModule = typeof globalThis extends { WebAssembly: { Module: new (...args: any[]) => infer M } } ? M : never;
+
+export interface LoadModuleOptions {
+  /**
+   * The contents of `libpg-query.wasm`, or the module compiled from them, for
+   * hosts where the wrapper cannot read the file itself (a custom protocol
+   * without fetch support, a bundle that inlines assets). It is compiled once;
+   * every instance, including replacements after a failed call, is created from it.
+   */
+  wasm?: ArrayBuffer | ArrayBufferView | WasmCompiledModule;
+}
+
+function startProvidedInstance(): void {
+  replaceInstance();
+  if (!wasmModule) throw replaceError;
+}
+
+// A rest parameter keeps loadModule.length at 0, so `before(loadModule)` is not
+// mistaken for a callback-style hook by test runners.
+export async function loadModule(...args: [options?: LoadModuleOptions]): Promise<void> {
+  const wasm = args[0]?.wasm;
+  if (wasm !== undefined) {
+    const module = wasm instanceof WebAssembly.Module
+      ? wasm
+      : await WebAssembly.compile(wasm as ArrayBuffer | ArrayBufferView);
+    compiled = module;
+    wasmProvided = true;
+    startProvidedInstance();
+    return;
+  }
   while (!wasmModule) await instantiate();
 }
 
