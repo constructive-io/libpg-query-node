@@ -20,3 +20,13 @@ Bundlers don’t emit `.wasm` files by default — they stay inside `node_module
 * **Next.js + Webpack:** Add a `.wasm` asset rule or use the copy method.
 * **Turbopack:** Only the copy method works for now.
 * **Dev mode:** Optionally use a watcher script to auto-copy on rebuilds.
+
+#### 📦 Hosts that can't fetch the file
+
+If the runtime can't fetch or read the `.wasm` file at all (e.g. a custom protocol without fetch support), load the bytes yourself and pass them in:
+
+```ts
+import { loadModule } from 'libpg-query';
+
+await loadModule({ wasm: bytes }); // ArrayBuffer, typed array, or a compiled WebAssembly.Module
+```
