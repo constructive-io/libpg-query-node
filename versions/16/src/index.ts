@@ -143,10 +143,25 @@ let failures = 0;
 // about 45, a stack overflow can make the next one spin forever.
 const MAX_STALE_FAILURES = 10;
 let staleFailures = 0;
+// Set by loadModule({ wasm }); instances are then created from it instead of the file.
+let provided: WasmCompiledModule | undefined;
+
+function createModule(): Promise<any> {
+  const module = provided;
+  if (!module) return PgQueryModule();
+  return new Promise((resolve, reject) => {
+    PgQueryModule({
+      instantiateWasm(imports: any, receive: (instance: any) => void) {
+        WebAssembly.instantiate(module, imports).then(receive, reject);
+        return {};
+      },
+    }).then(resolve, reject);
+  });
+}
 
 function instantiate(): Promise<void> {
   if (loading) return loading;
-  const promise = PgQueryModule().then(
+  const promise = createModule().then(
     (module: any) => {
       wasmModule = module;
       stale = false;
@@ -195,7 +210,32 @@ function ensureLoaded() {
   if (!wasmModule) throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
 
-export async function loadModule() {
+type WasmCompiledModule = typeof globalThis extends {
+  WebAssembly: { Module: new (...args: any[]) => infer M }
+} ? M : never;
+
+export interface LoadModuleOptions {
+  /**
+   * The contents of `libpg-query.wasm`, or the module compiled from them, for
+   * hosts where the wrapper cannot read the file itself (a custom protocol
+   * without fetch support, a bundle that inlines assets). Every later instance,
+   * including replacements after a failed call, is created from it.
+   */
+  wasm?: ArrayBuffer | ArrayBufferView | WasmCompiledModule;
+}
+
+// A rest parameter keeps loadModule.length at 0, so `before(loadModule)` is not
+// mistaken for a callback-style hook by test runners.
+export async function loadModule(...args: [options?: LoadModuleOptions]): Promise<void> {
+  const wasm = args[0]?.wasm;
+  if (wasm !== undefined) {
+    provided = wasm instanceof WebAssembly.Module
+      ? wasm
+      : await WebAssembly.compile(wasm as ArrayBuffer | ArrayBufferView);
+    // An instance loaded from the file, or still loading, is replaced by one from `wasm`.
+    await loading?.catch(() => {});
+    stale = true;
+  }
   while (!wasmModule || stale) await instantiate();
 }
 
