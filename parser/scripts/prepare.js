@@ -45,8 +45,8 @@ function generateTemplateVars(versions) {
   // For TypeScript union: 13 | 14 | 15 | 16 | 17
   const versionUnion = versions.join(' | ');
   
-  // For ESM exports: export * as v13 from './v13/index.js';
-  const versionExports = versions.map(v => `export * as v${v} from './v${v}/index.js';`).join('\n');
+  // For ESM exports: export * as v13 from './v13/index.mjs';
+  const versionExports = versions.map(v => `export * as v${v} from './v${v}/index.mjs';`).join('\n');
   
   // For CommonJS requires: v13: require('./v13/index.cjs'),
   const versionRequires = versions.map(v => `  v${v}: require('./v${v}/index.cjs')`).join(',\n');
@@ -113,7 +113,9 @@ config.versions.forEach(version => {
   const files = fs.readdirSync(sourceWasmDir);
   files.forEach(file => {
     const sourcePath = path.join(sourceWasmDir, file);
-    const destPath = path.join(versionWasmDir, file);
+    // ESM files must be .mjs: the package has no "type": "module", so Node
+    // before 20.19 (and without syntax detection) would load a .js as CommonJS.
+    const destPath = path.join(versionWasmDir, file === 'index.js' ? 'index.mjs' : file);
     
     if (fs.statSync(sourcePath).isFile()) {
       console.log(`Copying ${file} for v${version}...`);
@@ -162,7 +164,7 @@ const templateVars = generateTemplateVars(config.versions);
 
 // Process each template
 const templates = [
-  { template: 'index.js.template', output: 'index.js' },
+  { template: 'index.js.template', output: 'index.mjs' },
   { template: 'index.cjs.template', output: 'index.cjs' },
   { template: 'index.d.ts.template', output: 'index.d.ts' }
 ];
@@ -182,9 +184,9 @@ templates.forEach(({ template, output }) => {
 config.versions.forEach(version => {
   // ESM version
   const esmContent = `// Re-export everything from the v${version} parser
-export * from './v${version}/index.js';
+export * from './v${version}/index.mjs';
 `;
-  fs.writeFileSync(path.join(wasmDir, `v${version}.js`), esmContent);
+  fs.writeFileSync(path.join(wasmDir, `v${version}.mjs`), esmContent);
   
   // CJS version
   const cjsContent = `// Re-export everything from the v${version} parser

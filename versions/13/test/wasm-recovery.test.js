@@ -22,21 +22,55 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
-  // Without the 10-failure cap, about 45 overflows on one instance made the next one spin forever.
-  it('stops sync calls on the stale instance after 10 real overflows in one synchronous loop', async () => {
+  it('keeps sync calls working through 60 overflows in one synchronous loop', async () => {
     await loadModule();
-    const errors = [];
+    const results = [];
     for (let i = 0; i < 60; i++) {
-      try {
-        parseSync(DEEP);
-      } catch (error) {
-        errors.push(error instanceof RangeError ? 'overflow' : error.message);
+      for (const query of [DEEP, 'SELECT 1']) {
+        try {
+          results.push(parseSync(query).stmts.length);
+        } catch (error) {
+          results.push(error instanceof RangeError ? 'overflow' : error.message);
+        }
       }
     }
-    assert.deepEqual(errors.slice(0, 10), Array(10).fill('overflow'));
-    for (const message of errors.slice(10)) assert.match(message, /Call `?loadModule\(\)`? first/);
-    await loadModule();
-    assert.equal(parseSync('SELECT 1').stmts.length, 1);
+    assert.deepEqual(results, Array(60).fill(['overflow', 1]).flat());
+  });
+
+  it('gives the next sync call a fresh instance after the memory limit is hit', () => {
+    assert.throws(() => parseSync('SELECT 1;\n'.repeat(5000000)), /out of WASM memory/);
+    assert.equal(parseSync('SELECT 1;\n'.repeat(1000000)).stmts.length, 1000000);
+  });
+
+  // Each replaced instance stays allocated until the synchronous run yields.
+  it('stops replacing after repeated out-of-memory failures in one synchronous run, and recovers after an await', () => {
+    const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
+      (async () => {
+        await lib.loadModule();
+        const huge = 'SELECT 1;\\n'.repeat(5000000);
+        const messages = [];
+        let peak = 0;
+        for (let i = 0; i < 10; i++) {
+          try { lib.parseSync(huge); } catch (error) { messages.push(error.message + ' / ' + error.cause?.message); }
+          peak = Math.max(peak, process.memoryUsage().rss);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const after = lib.parseSync('SELECT 1').stmts.length;
+        process.stdout.write('\\nresult=' + JSON.stringify({ messages, peak, after }));
+      })();`;
+    const output = execFileSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const { messages, peak, after } = JSON.parse(output.match(/^result=(.*)$/m)[1]);
+    assert.equal(messages.length, 10);
+    assert.match(messages[0], /out of WASM memory/);
+    assert.match(messages[1], /out of WASM memory/);
+    for (const message of messages.slice(2)) {
+      assert.match(message, /^WASM memory limit hit repeatedly in one synchronous run; yield \(await\) to free memory \/ .*out of WASM memory/);
+    }
+    assert.ok(peak < 2.5 * 1024 ** 3, `peak RSS ${Math.round(peak / 1024 ** 2)} MiB`);
+    assert.equal(after, 1);
   });
 
   it('frees each replaced instance, so WASM memory stays at one instance', () => {
@@ -118,16 +152,22 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(loads, 3);
   });
 
-  it('lets loadModule() reject on a failed reload and retry on the next call', async () => {
+  it('names the cause when a fresh instance cannot start, and loadModule() retries', async () => {
     let loads = 0;
-    const isolated = loadIsolated((real, ...args) =>
-      ++loads === 2 ? Promise.reject(new Error('simulated load failure')) : real(...args));
+    const isolated = loadIsolated((real, options) => {
+      if (++loads === 2 || loads === 3) failInstantiate(options);
+      return real(options);
+    });
     await isolated.loadModule();
-    assert.throws(() => isolated.parseSync(DEEP));
-    await assert.rejects(isolated.loadModule(), /simulated load failure/);
+    assert.throws(() => isolated.parseSync(DEEP), RangeError);
+    assert.throws(() => isolated.parseSync('SELECT 1'), (error) => {
+      assert.match(error.message, /Could not start a fresh WASM instance/);
+      assert.match(error.cause.message, /simulated instantiate failure/);
+      return true;
+    });
     await isolated.loadModule();
     assert.equal(isolated.parseSync('SELECT 1').stmts.length, 1);
-    assert.equal(loads, 3);
+    assert.equal(loads, 4);
   });
 
   it('keeps sync calls in the same synchronous loop working after a failure', () => {
@@ -145,18 +185,16 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.deepEqual(results, expected);
   });
 
-  it('retries a failed fresh load on the next failure, for callers that never await', async () => {
+  it('retries a fresh instance that failed to start on the next sync call', async () => {
     let loads = 0;
-    const isolated = loadIsolated((real, ...args) =>
-      ++loads === 2 ? Promise.reject(new Error('simulated load failure')) : real(...args));
+    const isolated = loadIsolated((real, options) => {
+      if (++loads === 2) failInstantiate(options);
+      return real(options);
+    });
     await isolated.loadModule();
-    assert.throws(() => isolated.parseSync(DEEP));
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(loads, 2);
-    assert.throws(() => isolated.parseSync(DEEP));
-    assert.equal(loads, 3);
-    await isolated.loadModule();
+    assert.throws(() => isolated.parseSync(DEEP), RangeError);
     assert.equal(isolated.parseSync('SELECT 1').stmts.length, 1);
+    assert.equal(loads, 3);
   });
 
   it('makes loadModule() wait again when a queued call breaks the fresh instance', async () => {
@@ -201,9 +239,15 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
   let used;
   let frees = 0;
   let throwNext;
-  const isolated = loadIsolated(async (real, ...args) => {
+  const isolated = loadIsolated((real, options) => {
     const id = ++loads;
-    const module = await real(...args);
+    const ready = real(options);
+    // A replacement instance is built synchronously; the first load is async.
+    if (typeof options._malloc === 'function') return instrument(options, id) && ready;
+    return ready.then((module) => instrument(module, id));
+  });
+
+  function instrument(module, id) {
     const free = module._free;
     module._free = (ptr) => {
       frees++;
@@ -221,7 +265,7 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
       };
     }
     return module;
-  });
+  }
 
   async function failOnce(name, query, thrown) {
     await isolated.loadModule();
@@ -242,73 +286,38 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
     assert.equal(exitCodeAfter, 0, `${name} changed process.exitCode`);
     assert.equal(frees, freesBefore, `${name} freed memory in the instance that threw`);
     assert.equal(loads, loadsBefore + 1, `${name} did not start a fresh instance`);
-    const stale = used;
     const syncName = name.endsWith('Sync') ? name : 'parseSync';
-    assert.ok(isolated[syncName](query), `${syncName} failed while the fresh instance loads`);
-    assert.equal(used, stale, 'a sync call did not run on the stale instance');
+    assert.ok(isolated[syncName](query), `${syncName} failed right after the failure`);
+    assert.equal(used, loads, `${syncName} ran on the instance that threw`);
     assert.ok(frees > freesBefore, 'a successful call did not free its memory');
-    // A sync caller gets the fresh instance once it awaits loadModule(); async calls wait by themselves.
-    if (name.endsWith('Sync')) await isolated.loadModule();
     assert.ok(await isolated[name](query), `${name} failed after recovery`);
-    assert.equal(used, loads, `${name} ran on the stale instance, not the fresh one`);
+    assert.equal(used, loads, `${name} ran on the instance that threw`);
     return caught;
   }
 
-  it('starts one fresh instance for many failures in one synchronous loop', async () => {
+  it('starts a fresh instance for every failure in one synchronous loop', async () => {
     await isolated.loadModule();
     const loadsBefore = loads;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 30; i++) {
       throwNext = new RangeError('Maximum call stack size exceeded');
       assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
+      assert.ok(isolated.parseSync('SELECT 1'));
+      assert.equal(used, loads, 'a sync call ran on the instance that threw');
     }
-    assert.equal(loads, loadsBefore + 1);
-    await isolated.loadModule();
-    assert.ok(isolated.parseSync('SELECT 1'));
-    assert.equal(used, loads);
+    assert.equal(loads, loadsBefore + 30);
   });
 
-  it('stops sync calls on a stale instance after 10 failures until the fresh one loads', async () => {
-    await isolated.loadModule();
-    for (let i = 0; i < 9; i++) {
-      throwNext = new RangeError('Maximum call stack size exceeded');
-      assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
-    }
-    assert.ok(isolated.parseSync('SELECT 1'));
-    throwNext = new RangeError('Maximum call stack size exceeded');
-    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
-    assert.throws(() => isolated.parseSync('SELECT 1'), /Call `?loadModule\(\)`? first/);
-    await isolated.loadModule();
-    assert.ok(isolated.parseSync('SELECT 1'));
-    assert.equal(used, loads);
-  });
-
-  it('makes loadModule() and queued calls wait again when a queued call breaks the fresh instance', async () => {
+  it('never runs a queued call on the instance that threw', async () => {
     await isolated.loadModule();
     throwNext = new RangeError('Maximum call stack size exceeded');
-    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     const failing = isolated.parse('SELECT 1');
-    throwNext = new RangeError('Maximum call stack size exceeded');
-    const ready = isolated.loadModule();
     const after = isolated.parse('SELECT 1');
     await assert.rejects(failing, RangeError);
     assert.ok(await after);
-    assert.equal(used, loads, 'a queued call ran on the instance that just threw');
-    await ready;
-    assert.ok(isolated.parseSync('SELECT 1'));
-    assert.equal(used, loads, 'loadModule() resolved before the fresh instance loaded');
-  });
-
-  it('makes loadModule() wait again when a call queued ahead of it breaks the fresh instance', async () => {
+    assert.equal(used, loads, 'a queued call ran on the instance that threw');
     await isolated.loadModule();
-    throwNext = new RangeError('Maximum call stack size exceeded');
-    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
-    const failing = isolated.parse('SELECT 1');
-    throwNext = new RangeError('Maximum call stack size exceeded');
-    const ready = isolated.loadModule();
-    await assert.rejects(failing, RangeError);
-    await ready;
     assert.ok(isolated.parseSync('SELECT 1'));
-    assert.equal(used, loads, 'loadModule() resolved before the fresh instance loaded');
+    assert.equal(used, loads);
   });
 
   it('names a thrown object that has no message', async () => {
@@ -330,10 +339,18 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
       const caught = await failOnce(name, query, thrown);
       assert.ok(caught instanceof Error);
       assert.match(caught.message, /out of WASM memory/);
-      assert.equal(caught.cause, thrown);
+      assert.deepEqual(caught.cause, thrown);
     });
   }
 });
+
+// Makes the loader's synchronous instantiation fail, as if the new instance's memory could not be allocated.
+function failInstantiate(options) {
+  const instantiateWasm = options.instantiateWasm;
+  if (!instantiateWasm) return;
+  options.instantiateWasm = (imports) =>
+    instantiateWasm(imports, () => { throw new Error('simulated instantiate failure'); });
+}
 
 // A copy of the wrapper whose WASM factory is wrapped, leaving the shared copy alone.
 function loadIsolated(wrapFactory) {

@@ -19,7 +19,7 @@ WASM_STACK_SIZE ?= 33554432
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
 LIBPG_QUERY_TAG := 17-constructive
-LIBPG_QUERY_COMMIT := 1ade880fd1bbc6e89c33ea2424ddc366c41c1408
+LIBPG_QUERY_COMMIT := a09aa96ce74c6a546d2f7ebc3d393dc5cb0e7e99
 
 CACHE_DIR := .cache
 
@@ -77,7 +77,7 @@ ifdef EMSCRIPTEN
 		-I$(LIBPG_QUERY_DIR)/vendor \
 		-L$(LIBPG_QUERY_DIR) \
 		-sEXPORTED_FUNCTIONS="['_malloc','_free','_wasm_parse_query_raw','_wasm_free_parse_result']" \
-		-sEXPORTED_RUNTIME_METHODS="['lengthBytesUTF8','stringToUTF8','getValue','UTF8ToString','HEAPU8','HEAPU32']" \
+		-sEXPORTED_RUNTIME_METHODS="['lengthBytesUTF8','stringToUTF8','getValue','UTF8ToString','HEAPU8','HEAPU32','stackSave','stackRestore']" \
 		-sEXPORT_NAME="$(WASM_MODULE_NAME)" \
 		-sENVIRONMENT="web,node,worker" \
         -sASSERTIONS=0 \

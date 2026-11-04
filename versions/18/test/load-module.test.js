@@ -83,6 +83,10 @@ describe('loadModule({ wasm }) when the wrapper cannot read libpg-query.wasm', {
       return { messages, after: (await lib.parse('SELECT 1')).stmts.length };
     `);
     assert.equal(result.messages.length, 3);
+    assert.ok(
+      result.messages.some((m) => m.includes('WASM memory limit hit repeatedly')),
+      `expected the repeated-limit error, got ${JSON.stringify(result.messages)}`
+    );
     assert.equal(result.after, 1);
   });
 

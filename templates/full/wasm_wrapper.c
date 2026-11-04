@@ -1,9 +1,21 @@
 #include "pg_query.h"
 #include "protobuf/pg_query.pb-c.h"
 #include <emscripten.h>
+#include <emscripten/stack.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
+
+/* libpg_query's check_stack_depth() needs a reference point and a limit per
+ * entry: the shadow stack left after the previous call, minus a 512 KiB
+ * margin for the frames between here and the recursion. */
+extern void pg_query_set_stack_limit(size_t bytes) __attribute__((weak));
+static void set_stack_guard(void) {
+    if (!pg_query_set_stack_limit) return; /* libpg_query without the guard (upstream pins) */
+    size_t free_bytes = emscripten_stack_get_free();
+    pg_query_set_stack_limit(free_bytes > 524288 ? free_bytes - 524288 : 0);
+}
 
 static int validate_input(const char* input) {
     return input != NULL && strlen(input) > 0;
@@ -28,6 +40,7 @@ static void* safe_malloc(size_t size) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_parse_query(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -47,6 +60,7 @@ char* wasm_parse_query(const char* input) {
 
 EMSCRIPTEN_KEEPALIVE
 PgQueryParseResult* wasm_parse_query_raw(const char* input) {
+    set_stack_guard();
     PgQueryParseResult* result = (PgQueryParseResult*)malloc(sizeof(PgQueryParseResult));
     if (!result) {
         return NULL;
@@ -66,6 +80,7 @@ void wasm_free_parse_result(PgQueryParseResult* result) {
 
 EMSCRIPTEN_KEEPALIVE
 char* wasm_parse_plpgsql(const char* input) {
+    set_stack_guard();
     if (!validate_input(input)) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
@@ -104,53 +119,6 @@ char* wasm_parse_plpgsql(const char* input) {
     return wrapped_result;
 }
 
-EMSCRIPTEN_KEEPALIVE
-char* wasm_fingerprint(const char* input) {
-    if (!validate_input(input)) {
-        return safe_strdup("Invalid input: query cannot be null or empty");
-    }
-    
-    PgQueryFingerprintResult result = pg_query_fingerprint(input);
-    
-    if (result.error) {
-        char* error_msg = safe_strdup(result.error->message);
-        pg_query_free_fingerprint_result(result);
-        return error_msg ? error_msg : safe_strdup("Memory allocation failed");
-    }
-    
-    char* fingerprint_str = safe_strdup(result.fingerprint_str);
-    pg_query_free_fingerprint_result(result);
-    return fingerprint_str;
-}
-
-EMSCRIPTEN_KEEPALIVE
-char* wasm_normalize_query(const char* input) {
-    if (!validate_input(input)) {
-        return safe_strdup("Invalid input: query cannot be null or empty");
-    }
-    
-    PgQueryNormalizeResult result = pg_query_normalize(input);
-    
-    if (result.error) {
-        char* error_msg = safe_strdup(result.error->message);
-        pg_query_free_normalize_result(result);
-        return error_msg ? error_msg : safe_strdup("Memory allocation failed");
-    }
-    
-    char* normalized = safe_strdup(result.normalized_query);
-    pg_query_free_normalize_result(result);
-    
-    if (!normalized) {
-        return safe_strdup("Memory allocation failed");
-    }
-    
-    return normalized;
-}
-
-
-
-
-
 typedef struct {
     int has_error;
     char* message;
@@ -165,6 +133,7 @@ typedef struct {
 
 EMSCRIPTEN_KEEPALIVE
 WasmDetailedResult* wasm_parse_query_detailed(const char* input) {
+    set_stack_guard();
     WasmDetailedResult* result = safe_malloc(sizeof(WasmDetailedResult));
     if (!result) {
         return NULL;
@@ -230,6 +199,84 @@ void wasm_free_detailed_result(WasmDetailedResult* result) {
     }
 }
 
+static WasmDetailedResult* detailed_result_new(void) {
+    WasmDetailedResult* result = safe_malloc(sizeof(WasmDetailedResult));
+    if (result) {
+        memset(result, 0, sizeof(WasmDetailedResult));
+    }
+    return result;
+}
+
+static WasmDetailedResult* detailed_set_error(WasmDetailedResult* result, PgQueryError* error) {
+    result->has_error = 1;
+    result->message = safe_strdup(error->message);
+    result->funcname = error->funcname ? safe_strdup(error->funcname) : NULL;
+    result->filename = error->filename ? safe_strdup(error->filename) : NULL;
+    result->context = error->context ? safe_strdup(error->context) : NULL;
+    result->lineno = error->lineno;
+    result->cursorpos = error->cursorpos;
+    return result;
+}
+
+static WasmDetailedResult* detailed_set_message(WasmDetailedResult* result, const char* message) {
+    result->has_error = 1;
+    result->message = safe_strdup(message);
+    return result;
+}
+
+// Out of memory returns NULL, which the JS side reports as out of WASM memory.
+static WasmDetailedResult* detailed_set_data(WasmDetailedResult* result, char* data) {
+    if (!data) {
+        wasm_free_detailed_result(result);
+        return NULL;
+    }
+    result->data = data;
+    result->data_len = strlen(data);
+    return result;
+}
+
+EMSCRIPTEN_KEEPALIVE
+WasmDetailedResult* wasm_fingerprint(const char* input) {
+    set_stack_guard();
+    WasmDetailedResult* result = detailed_result_new();
+    if (!result) {
+        return NULL;
+    }
+    if (!validate_input(input)) {
+        return detailed_set_message(result, "Invalid input: query cannot be null or empty");
+    }
+
+    PgQueryFingerprintResult fingerprint_result = pg_query_fingerprint(input);
+    if (fingerprint_result.error) {
+        detailed_set_error(result, fingerprint_result.error);
+    } else {
+        result = detailed_set_data(result, safe_strdup(fingerprint_result.fingerprint_str));
+    }
+    pg_query_free_fingerprint_result(fingerprint_result);
+    return result;
+}
+
+EMSCRIPTEN_KEEPALIVE
+WasmDetailedResult* wasm_normalize_query(const char* input) {
+    set_stack_guard();
+    WasmDetailedResult* result = detailed_result_new();
+    if (!result) {
+        return NULL;
+    }
+    if (!validate_input(input)) {
+        return detailed_set_message(result, "Invalid input: query cannot be null or empty");
+    }
+
+    PgQueryNormalizeResult normalize_result = pg_query_normalize(input);
+    if (normalize_result.error) {
+        detailed_set_error(result, normalize_result.error);
+    } else {
+        result = detailed_set_data(result, safe_strdup(normalize_result.normalized_query));
+    }
+    pg_query_free_normalize_result(normalize_result);
+    return result;
+}
+
 static const char* get_token_name(PgQuery__Token token_type) {
     // Map some common token types to readable names
     // Note: This is a simplified mapping - full enum lookup would require more complexity
@@ -266,24 +313,28 @@ static const char* get_keyword_name(PgQuery__KeywordKind keyword_kind) {
     }
 }
 
+// Returns NULL when out of memory: a partial token list must never pass as a result.
 static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* original_sql) {
     if (!scan_result || !original_sql) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return NULL;
     }
     
     // Size the buffer from token text length, not token count: each token
-    // contributes at most ~170 bytes of fixed JSON plus up to 2 bytes per input
-    // byte once escaped.
+    // contributes at most ~170 bytes of fixed JSON plus up to 6 bytes per input
+    // byte once escaped (\\u00XX for control characters).
     size_t estimated_size = 1024;
     for (size_t i = 0; i < scan_result->n_tokens; i++) {
         PgQuery__ScanToken *token = scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
-        estimated_size += (size_t) token_length * 2 + 200;
+        if ((size_t) token_length > (SIZE_MAX - 200 - estimated_size) / 6) {
+            return NULL;
+        }
+        estimated_size += (size_t) token_length * 6 + 200;
     }
     char* json = safe_malloc(estimated_size);
     if (!json) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return NULL;
     }
     
     // Start building JSON
@@ -296,8 +347,11 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0; // Safety check
         
-        char* token_text = safe_malloc(token_length + 1);
-        if (!token_text) continue;
+        char* token_text = safe_malloc((size_t) token_length + 1);
+        if (!token_text) {
+            free(json);
+            return NULL;
+        }
         
         if (token_length > 0) {
             strncpy(token_text, &original_sql[token->start], token_length);
@@ -305,10 +359,11 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         token_text[token_length] = '\0';
         
         // Escape token text for JSON
-        char* escaped_text = safe_malloc(token_length * 2 + 1);
+        char* escaped_text = safe_malloc((size_t) token_length * 6 + 1);
         if (!escaped_text) {
             free(token_text);
-            continue;
+            free(json);
+            return NULL;
         }
         
         int escaped_pos = 0;
@@ -326,6 +381,8 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
             } else if (c == '\t') {
                 escaped_text[escaped_pos++] = '\\';
                 escaped_text[escaped_pos++] = 't';
+            } else if ((unsigned char) c < 0x20) {
+                escaped_pos += snprintf(escaped_text + escaped_pos, 7, "\\u%04x", (unsigned char) c);
             } else {
                 escaped_text[escaped_pos++] = c;
             }
@@ -364,36 +421,35 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
 }
 
 EMSCRIPTEN_KEEPALIVE
-char* wasm_scan(const char* input) {
+WasmDetailedResult* wasm_scan(const char* input) {
+    set_stack_guard();
+    WasmDetailedResult* result = detailed_result_new();
+    if (!result) {
+        return NULL;
+    }
     if (!validate_input(input)) {
-        return safe_strdup("Invalid input: query cannot be null or empty");
+        return detailed_set_message(result, "Invalid input: query cannot be null or empty");
     }
-    
-    PgQueryScanResult result = pg_query_scan(input);
-    
-    if (result.error) {
-        char* error_msg = safe_strdup(result.error->message);
-        pg_query_free_scan_result(result);
-        return error_msg ? error_msg : safe_strdup("Memory allocation failed");
+
+    PgQueryScanResult scan_result = pg_query_scan(input);
+    if (scan_result.error) {
+        detailed_set_error(result, scan_result.error);
+        pg_query_free_scan_result(scan_result);
+        return result;
     }
-    
-    // Unpack protobuf data
-    PgQuery__ScanResult *scan_result = pg_query__scan_result__unpack(
-        NULL, result.pbuf.len, (void *) result.pbuf.data);
-    
-    if (!scan_result) {
-        pg_query_free_scan_result(result);
-        return safe_strdup("Failed to unpack scan result");
+
+    PgQuery__ScanResult *unpacked = pg_query__scan_result__unpack(
+        NULL, scan_result.pbuf.len, (void *) scan_result.pbuf.data);
+    if (!unpacked) {
+        pg_query_free_scan_result(scan_result);
+        wasm_free_detailed_result(result);
+        return NULL;
     }
-    
-    // Convert to JSON
-    char* json_result = build_scan_json(scan_result, input);
-    
-    // Clean up
-    pg_query__scan_result__free_unpacked(scan_result, NULL);
-    pg_query_free_scan_result(result);
-    
-    return json_result ? json_result : safe_strdup("{\"version\":0,\"tokens\":[]}");
+
+    char* json = build_scan_json(unpacked, input);
+    pg_query__scan_result__free_unpacked(unpacked, NULL);
+    pg_query_free_scan_result(scan_result);
+    return detailed_set_data(result, json);
 }
 
 EMSCRIPTEN_KEEPALIVE

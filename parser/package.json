@@ -4,43 +4,43 @@
   "author": "Constructive <developers@constructive.io>",
   "description": "Multi-version PostgreSQL parser with dynamic version selection",
   "main": "./wasm/index.cjs",
-  "module": "./wasm/index.js",
+  "module": "./wasm/index.mjs",
   "types": "./wasm/index.d.ts",
   "exports": {
     ".": {
-      "import": "./wasm/index.js",
-      "require": "./wasm/index.cjs",
-      "types": "./wasm/index.d.ts"
+      "types": "./wasm/index.d.ts",
+      "import": "./wasm/index.mjs",
+      "require": "./wasm/index.cjs"
     },
     "./v13": {
-      "import": "./wasm/v13.js",
-      "require": "./wasm/v13.cjs",
-      "types": "./wasm/v13.d.ts"
+      "types": "./wasm/v13.d.ts",
+      "import": "./wasm/v13.mjs",
+      "require": "./wasm/v13.cjs"
     },
     "./v14": {
-      "import": "./wasm/v14.js",
-      "require": "./wasm/v14.cjs",
-      "types": "./wasm/v14.d.ts"
+      "types": "./wasm/v14.d.ts",
+      "import": "./wasm/v14.mjs",
+      "require": "./wasm/v14.cjs"
     },
     "./v15": {
-      "import": "./wasm/v15.js",
-      "require": "./wasm/v15.cjs",
-      "types": "./wasm/v15.d.ts"
+      "types": "./wasm/v15.d.ts",
+      "import": "./wasm/v15.mjs",
+      "require": "./wasm/v15.cjs"
     },
     "./v16": {
-      "import": "./wasm/v16.js",
-      "require": "./wasm/v16.cjs",
-      "types": "./wasm/v16.d.ts"
+      "types": "./wasm/v16.d.ts",
+      "import": "./wasm/v16.mjs",
+      "require": "./wasm/v16.cjs"
     },
     "./v17": {
-      "import": "./wasm/v17.js",
-      "require": "./wasm/v17.cjs",
-      "types": "./wasm/v17.d.ts"
+      "types": "./wasm/v17.d.ts",
+      "import": "./wasm/v17.mjs",
+      "require": "./wasm/v17.cjs"
     },
     "./v18": {
-      "import": "./wasm/v18.js",
-      "require": "./wasm/v18.cjs",
-      "types": "./wasm/v18.d.ts"
+      "types": "./wasm/v18.d.ts",
+      "import": "./wasm/v18.mjs",
+      "require": "./wasm/v18.cjs"
     }
   },
   "files": [
