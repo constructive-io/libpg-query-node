@@ -67,3 +67,44 @@ describe("Query Normalization", () => {
     });
   });
 });
+
+describe("normalize errors", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  // Errors raised outside the grammar's "syntax error" path used to come back
+  // as the normalize result instead of being thrown.
+  const failing = [
+    ["select percentile_cont(p order by p) within group (order by x) from t", "cannot use multiple ORDER BY clauses with WITHIN GROUP"],
+    ["CREATE TABLE p (a int) PARTITION BY MAGIC (a)", 'unrecognized partitioning strategy "magic"'],
+    ['SELECT "x', "unterminated quoted identifier at or near \"\"x\""],
+  ];
+
+  it("throws SqlError for empty input", async () => {
+    assert.throws(() => query.normalizeSync(""), { name: "SqlError", message: /^Invalid input/ });
+    await assert.rejects(query.normalize(""), { name: "SqlError", message: /^Invalid input/ });
+  });
+
+  for (const [sql, message] of failing) {
+    it(`normalizeSync throws SqlError for ${sql}`, () => {
+      assert.throws(() => query.normalizeSync(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        assert.equal(typeof err.sqlDetails.fileName, "string");
+        assert.equal(typeof err.sqlDetails.functionName, "string");
+        assert.ok(err.sqlDetails.lineNumber > 0);
+        return true;
+      });
+    });
+
+    it(`normalize rejects with SqlError for ${sql}`, async () => {
+      await assert.rejects(query.normalize(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        return true;
+      });
+    });
+  }
+});

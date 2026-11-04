@@ -305,3 +305,76 @@ comment */ SELECT 2`;
     });
   });
 });
+
+describe("scan errors", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  // Scanner errors used to surface as a JSON.parse SyntaxError on the message.
+  const failing = [
+    ["SELECT 'abc", "unterminated quoted string at or near \"'abc\""],
+    ["SELECT $$x", "unterminated dollar-quoted string at or near \"$$x\""],
+  ];
+
+  for (const [sql, message] of failing) {
+    it(`scanSync throws SqlError for ${sql}`, () => {
+      assert.throws(() => query.scanSync(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        assert.equal(typeof err.sqlDetails.fileName, "string");
+        assert.equal(typeof err.sqlDetails.functionName, "string");
+        assert.ok(err.sqlDetails.lineNumber > 0);
+        return true;
+      });
+    });
+
+    it(`scan rejects with SqlError for ${sql}`, async () => {
+      await assert.rejects(query.scan(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        return true;
+      });
+    });
+  }
+});
+
+describe("scan input limits", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  it("throws SqlError for empty input", async () => {
+    assert.throws(() => query.scanSync(""), { name: "SqlError", message: /^Invalid input/ });
+    await assert.rejects(query.scan(""), { name: "SqlError", message: /^Invalid input/ });
+  });
+
+  // About 11 MB: the token JSON no longer fits in the 1 GiB heap. This used to
+  // return { version: 0, tokens: [] } instead of throwing.
+  it("throws when the token JSON does not fit in WASM memory, then recovers", async () => {
+    const sql = "SELECT a, b FROM t WHERE c = 1;\n".repeat(360000);
+    assert.throws(() => query.scanSync(sql), /out of WASM memory/);
+    await assert.rejects(query.scan(sql), /out of WASM memory/);
+    assert.equal(query.scanSync("SELECT 1").tokens.length, 2);
+  });
+
+  // 6M one-character tokens (20 MB) used to return tokens: [] as well.
+  it("throws for many short tokens instead of returning none", () => {
+    assert.equal(query.scanSync("SELECT 1;\n".repeat(1000000)).tokens.length, 3000000);
+    assert.throws(() => query.scanSync("SELECT 1;\n".repeat(2000000)), /out of WASM memory/);
+  });
+});
+
+describe("scan control characters", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  it("escapes control characters in token text", () => {
+    const sql = "SELECT E'a\u0002b'";
+    const result = query.scanSync(sql);
+    const literal = result.tokens.find((t) => t.tokenName === "SCONST");
+    assert.equal(literal.text, "E'a\u0002b'");
+  });
+});
