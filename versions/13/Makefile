@@ -42,6 +42,7 @@ endif
 
 PLATFORM_ARCH := $(PLATFORM)-$(ARCH)
 SRC_FILES := src/wasm_wrapper.c
+PRE_JS := src/pre.js
 LIBPG_QUERY_DIR := $(CACHE_DIR)/$(PLATFORM_ARCH)/libpg_query/$(LIBPG_QUERY_COMMIT)
 LIBPG_QUERY_ARCHIVE := $(LIBPG_QUERY_DIR)/libpg_query.a
 LIBPG_QUERY_HEADER := $(LIBPG_QUERY_DIR)/pg_query.h
@@ -72,7 +73,7 @@ $(LIBPG_QUERY_ARCHIVE): $(LIBPG_QUERY_DIR)
 	cd $(LIBPG_QUERY_DIR); $(MAKE) build
 
 # Build libpg-query-node WASM module
-$(OUT_FILES): $(LIBPG_QUERY_ARCHIVE) $(LIBPG_QUERY_HEADER) $(SRC_FILES)
+$(OUT_FILES): $(LIBPG_QUERY_ARCHIVE) $(LIBPG_QUERY_HEADER) $(SRC_FILES) $(PRE_JS)
 ifdef EMSCRIPTEN
 	mkdir -p $(WASM_OUT_DIR)
 	$(CC) \
@@ -85,6 +86,7 @@ ifdef EMSCRIPTEN
 		-sEXPORTED_RUNTIME_METHODS="['lengthBytesUTF8','stringToUTF8','getValue','UTF8ToString','HEAPU8','HEAPU32']" \
 		-sEXPORT_NAME="$(WASM_MODULE_NAME)" \
 		-sENVIRONMENT="web,node,worker" \
+		--pre-js $(PRE_JS) \
         -sASSERTIONS=0 \
         -sSINGLE_FILE=0 \
 		-sMODULARIZE=1 \

@@ -65,7 +65,8 @@ const TEMPLATE_FILES = [
   { src: 'LICENSE', dest: 'LICENSE', header: false, hasFullVariant: false },
   { src: 'wasm_wrapper.c', dest: 'src/wasm_wrapper.c', header: HEADER, hasFullVariant: true },
   { src: 'libpg-query.d.ts', dest: 'src/libpg-query.d.ts', header: HEADER, hasFullVariant: true },
-  { src: 'index.ts', dest: 'src/index.ts', header: HEADER, hasFullVariant: true }
+  { src: 'index.ts', dest: 'src/index.ts', header: HEADER, hasFullVariant: true },
+  { src: 'pre.js', dest: 'src/pre.js', header: HEADER, hasFullVariant: false }
 ];
 
 const SLIM_EXPORTED_FUNCTIONS = "['_malloc','_free','_wasm_parse_query_raw','_wasm_free_parse_result']";

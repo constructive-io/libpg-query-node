@@ -31,4 +31,13 @@ import { loadModule } from 'libpg-query';
 await loadModule({ wasm: bytes }); // ArrayBuffer, typed array, or a compiled WebAssembly.Module
 ```
 
+On Cloudflare Workers, import the `.wasm` as a module and pass it in:
+
+```ts
+import { loadModule } from 'libpg-query';
+import wasm from 'libpg-query/wasm/libpg-query.wasm';
+
+await loadModule({ wasm });
+```
+
 Pass only the `libpg-query.wasm` shipped with the package (or bytes you trust as much): whatever you pass runs as the parser.
