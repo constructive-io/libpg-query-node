@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 
 const WASM = path.join(__dirname, '../wasm/libpg-query.wasm');
 const RESULT = 'RESULT ';
@@ -89,6 +90,59 @@ describe('loadModule({ wasm }) when the wrapper cannot read libpg-query.wasm', {
   it('rejects input that is not WebAssembly', () => {
     const result = withoutWasmFile(`await lib.loadModule({ wasm: new Uint8Array([1, 2, 3]) }); return { ok: true };`);
     assert.ok(result.error);
+  });
+});
+
+// Cloudflare Workers with `nodejs_compat` define `process.versions.node` and
+// `WorkerGlobalScope`, but no `__dirname`, `__filename` or `self.location`.
+// Loads the wrapper and the glue as plain functions, so neither sees a module
+// scope, in a process that also has those two markers.
+function inWorkerLikeHost(body) {
+  const dir = path.join(__dirname, '../wasm');
+  const script = `
+    globalThis.WorkerGlobalScope = class WorkerGlobalScope {};
+    globalThis.self = globalThis;
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const dir = ${JSON.stringify(dir)};
+    const load = (file, req) => {
+      const module = { exports: {} };
+      new Function('module', 'exports', 'require', fs.readFileSync(path.join(dir, file), 'utf8'))(module, module.exports, req);
+      return module.exports;
+    };
+    const glue = load('libpg-query.js', (id) => { throw new Error('the glue required ' + id); });
+    const lib = load('index.cjs', (id) => id === './libpg-query.js' ? glue : require(require.resolve(id, { paths: [dir] })));
+    const bytes = fs.readFileSync(path.join(dir, 'libpg-query.wasm'));
+    (async () => { ${body} })().then(
+      (result) => console.log(${JSON.stringify(RESULT)} + JSON.stringify(result)),
+      (error) => { console.log(${JSON.stringify(RESULT)} + JSON.stringify({ error: String(error && error.message || error) })); }
+    );
+  `;
+  // A file, not `-e`: eval code gets `__dirname` and `__filename` as globals.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-like-'));
+  const file = path.join(tmp, 'host.js');
+  fs.writeFileSync(file, script);
+  let run;
+  try {
+    run = spawnSync(process.execPath, [file], { encoding: 'utf8', timeout: 120000 });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  const line = (run.stdout || '').split('\n').reverse().find((l) => l.startsWith(RESULT));
+  if (!line) {
+    const how = run.error ? run.error.message : run.signal ? `signal ${run.signal}` : `exit ${run.status}`;
+    throw new Error(`child process gave no result (${how}):\n${(run.stderr || '').slice(-4000)}`);
+  }
+  return JSON.parse(line.slice(RESULT.length));
+}
+
+describe('loadModule({ wasm }) in a host without __dirname or self.location', { timeout: 300000 }, () => {
+  it('loads from the bytes and parses', () => {
+    const result = inWorkerLikeHost(`
+      await lib.loadModule({ wasm: bytes });
+      return { stmts: (await lib.parse('SELECT 1')).stmts.length };
+    `);
+    assert.deepEqual(result, { stmts: 1 });
   });
 });
 
