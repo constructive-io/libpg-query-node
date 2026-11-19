@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  high_level_summary: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!pnpm-lock.yaml"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/libs/**"
+    - "!**/esm/**"
+    - "!**/cjs/**"
+    - "!**/__snapshots__/**"
+    - "!**/.cache/**"
+    - "!**/libpg_query/**"
+    - "!**/wasm/**"
+    - "!**/*.wasm"
+    - "!**/*.a"
+    - "!protos/**"
+    - "!types/*/src/types.ts"
+    - "!types/*/src/enums.ts"
+    - "!enums/*/src/index.ts"
+  path_instructions:
+    - path: "versions/**"
+      instructions: >-
+        Follow REPO_NOTES.md. Version wrappers and Makefiles are generated from
+        templates; prefer fixes to templates and regeneration with copy:templates.
+        Check PostgreSQL-version compatibility, WASM memory ownership and cleanup,
+        and consistency between synchronous and asynchronous APIs.
+    - path: "templates/**"
+      instructions: >-
+        Review changes across slim and full-API templates and the PostgreSQL
+        versions that consume them. Check WASM memory ownership, cleanup on
+        error paths, and consistency between synchronous and asynchronous APIs.
+chat:
+  art: false
