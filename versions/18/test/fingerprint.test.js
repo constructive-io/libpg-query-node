@@ -65,3 +65,44 @@ describe("Query Fingerprinting", () => {
     });
   });
 });
+
+describe("fingerprint errors", () => {
+  before(async () => {
+    await query.parse("SELECT 1");
+  });
+
+  // Errors raised outside the grammar's "syntax error" path used to come back
+  // as the fingerprint result instead of being thrown.
+  const failing = [
+    ["select percentile_cont(p order by p) within group (order by x) from t", "cannot use multiple ORDER BY clauses with WITHIN GROUP"],
+    ["CREATE TABLE p (a int) PARTITION BY MAGIC (a)", 'unrecognized partitioning strategy "magic"'],
+    ["SELECT 'abc", "unterminated quoted string at or near \"'abc\""],
+  ];
+
+  it("throws SqlError for empty input", async () => {
+    assert.throws(() => query.fingerprintSync(""), { name: "SqlError", message: /^Invalid input/ });
+    await assert.rejects(query.fingerprint(""), { name: "SqlError", message: /^Invalid input/ });
+  });
+
+  for (const [sql, message] of failing) {
+    it(`fingerprintSync throws SqlError for ${sql}`, () => {
+      assert.throws(() => query.fingerprintSync(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        assert.equal(typeof err.sqlDetails.cursorPosition, "number");
+        assert.equal(typeof err.sqlDetails.fileName, "string");
+        assert.equal(typeof err.sqlDetails.functionName, "string");
+        assert.ok(err.sqlDetails.lineNumber > 0);
+        return true;
+      });
+    });
+
+    it(`fingerprint rejects with SqlError for ${sql}`, async () => {
+      await assert.rejects(query.fingerprint(sql), (err) => {
+        assert.equal(err.name, "SqlError");
+        assert.equal(err.message, message);
+        return true;
+      });
+    });
+  }
+});

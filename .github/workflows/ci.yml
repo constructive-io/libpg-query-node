@@ -54,6 +54,9 @@ jobs:
         run: pnpm run build
         working-directory: ${{ matrix.package.path }}
 
+      - name: Native parity 🔍
+        run: node scripts/native-parity.js ${{ matrix.package.path }}
+
       - name: Upload WASM Artifacts 📦
         uses: actions/upload-artifact@v4
         with:
