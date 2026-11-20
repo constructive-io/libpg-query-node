@@ -33,7 +33,7 @@ export class Parser {
   }
   
   async _doLoad() {
-    const module = await import(`./v${this.version}/index.js`);
+    const module = await import(`./v${this.version}/index.mjs`);
     this.parser = module;
     
     if (this.parser.loadModule) {
