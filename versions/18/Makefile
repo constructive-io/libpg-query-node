@@ -18,8 +18,8 @@ WASM_STACK_SIZE ?= 33554432
 # libpg_query source, pinned to an exact commit so a release can be rebuilt
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
-LIBPG_QUERY_TAG := feat/pg18-combined-patches
-LIBPG_QUERY_COMMIT := 0832f810aa38fb06358c761d0b1b246f337e9333
+LIBPG_QUERY_TAG := 18-constructive
+LIBPG_QUERY_COMMIT := f75f8010a8a75fe4645db550c5f8f435dbc938a3
 
 CACHE_DIR := .cache
 
