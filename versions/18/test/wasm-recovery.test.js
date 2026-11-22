@@ -22,20 +22,14 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
-  // Without the 10-failure cap, about 45 overflows on one instance made the next one spin forever.
-  it('stops sync calls on the stale instance after 10 real overflows in one synchronous loop', async () => {
+  // libpg_query checks stack depth itself, so deeply nested SQL is a clean error
+  // and the instance is kept. The 10-failure cap on a stale instance is covered
+  // by the injected throws in 'Recovery from a throw in each entry point'.
+  it('returns a stack depth error for deeply nested SQL and keeps the instance', async () => {
     await loadModule();
-    const errors = [];
     for (let i = 0; i < 60; i++) {
-      try {
-        parseSync(DEEP);
-      } catch (error) {
-        errors.push(error instanceof RangeError ? 'overflow' : error.message);
-      }
+      assert.throws(() => parseSync(DEEP), /stack depth limit exceeded/);
     }
-    assert.deepEqual(errors.slice(0, 10), Array(10).fill('overflow'));
-    for (const message of errors.slice(10)) assert.match(message, /Call `?loadModule\(\)`? first/);
-    await loadModule();
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
@@ -109,10 +103,10 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
 
   it('retries the load when loading a fresh instance fails', async () => {
     let loads = 0;
-    const isolated = loadIsolated((real, ...args) =>
-      ++loads === 2 ? Promise.reject(new Error('simulated load failure')) : real(...args));
+    const isolated = loadTrapping(() => ++loads === 2);
     await isolated.loadModule();
-    await assert.rejects(isolated.parse(DEEP));
+    isolated.trapNext();
+    await assert.rejects(isolated.parse('SELECT 1'), RangeError);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal((await isolated.parse('SELECT 1')).stmts.length, 1);
     assert.equal(loads, 3);
@@ -120,10 +114,10 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
 
   it('lets loadModule() reject on a failed reload and retry on the next call', async () => {
     let loads = 0;
-    const isolated = loadIsolated((real, ...args) =>
-      ++loads === 2 ? Promise.reject(new Error('simulated load failure')) : real(...args));
+    const isolated = loadTrapping(() => ++loads === 2);
     await isolated.loadModule();
-    assert.throws(() => isolated.parseSync(DEEP));
+    isolated.trapNext();
+    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     await assert.rejects(isolated.loadModule(), /simulated load failure/);
     await isolated.loadModule();
     assert.equal(isolated.parseSync('SELECT 1').stmts.length, 1);
@@ -147,13 +141,14 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
 
   it('retries a failed fresh load on the next failure, for callers that never await', async () => {
     let loads = 0;
-    const isolated = loadIsolated((real, ...args) =>
-      ++loads === 2 ? Promise.reject(new Error('simulated load failure')) : real(...args));
+    const isolated = loadTrapping(() => ++loads === 2);
     await isolated.loadModule();
-    assert.throws(() => isolated.parseSync(DEEP));
+    isolated.trapNext();
+    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(loads, 2);
-    assert.throws(() => isolated.parseSync(DEEP));
+    isolated.trapNext();
+    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     assert.equal(loads, 3);
     await isolated.loadModule();
     assert.equal(isolated.parseSync('SELECT 1').stmts.length, 1);
@@ -334,6 +329,26 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
     });
   }
 });
+
+// An isolated copy whose parse export throws once after trapNext(), standing in
+// for a WASM trap now that libpg_query returns stack depth errors instead.
+// failLoad() is called on each load; a true result rejects that load.
+function loadTrapping(failLoad) {
+  let trap = false;
+  const isolated = loadIsolated(async (real, ...args) => {
+    if (failLoad()) throw new Error('simulated load failure');
+    const module = await real(...args);
+    const parseRaw = module._wasm_parse_query_raw;
+    module._wasm_parse_query_raw = (...callArgs) => {
+      if (!trap) return parseRaw(...callArgs);
+      trap = false;
+      throw new RangeError('Maximum call stack size exceeded');
+    };
+    return module;
+  });
+  isolated.trapNext = () => { trap = true; };
+  return isolated;
+}
 
 // A copy of the wrapper whose WASM factory is wrapped, leaving the shared copy alone.
 function loadIsolated(wrapFactory) {
