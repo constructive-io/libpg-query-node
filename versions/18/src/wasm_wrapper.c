@@ -6,8 +6,8 @@
  */
 
 #include "pg_query.h"
-#include "protobuf/pg_query.pb-c.h"
 #include <emscripten.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -237,7 +237,7 @@ void wasm_free_detailed_result(WasmDetailedResult* result) {
     }
 }
 
-static const char* get_token_name(PgQuery__Token token_type) {
+static const char* get_token_name(PgQueryToken token_type) {
     // Map some common token types to readable names
     // Note: This is a simplified mapping - full enum lookup would require more complexity
     switch(token_type) {
@@ -262,7 +262,7 @@ static const char* get_token_name(PgQuery__Token token_type) {
     }
 }
 
-static const char* get_keyword_name(PgQuery__KeywordKind keyword_kind) {
+static const char* get_keyword_name(PgQueryKeywordKind keyword_kind) {
     switch(keyword_kind) {
         case 0: return "NO_KEYWORD";
         case 1: return "UNRESERVED_KEYWORD";
@@ -273,7 +273,7 @@ static const char* get_keyword_name(PgQuery__KeywordKind keyword_kind) {
     }
 }
 
-static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* original_sql) {
+static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const char* original_sql) {
     if (!scan_result || !original_sql) {
         return safe_strdup("{\"version\":0,\"tokens\":[]}");
     }
@@ -282,29 +282,36 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
     // contributes at most ~170 bytes of fixed JSON plus up to 2 bytes per input
     // byte once escaped.
     size_t estimated_size = 1024;
-    for (size_t i = 0; i < scan_result->n_tokens; i++) {
-        PgQuery__ScanToken *token = scan_result->tokens[i];
+    for (int i = 0; i < scan_result->n_tokens; i++) {
+        const PgQueryScanToken *token = &scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
-        estimated_size += (size_t) token_length * 2 + 200;
+        size_t token_size = (size_t) token_length * 2 + 200;
+        if (estimated_size > SIZE_MAX - token_size) {
+            return safe_strdup("out of memory");
+        }
+        estimated_size += token_size;
     }
     char* json = safe_malloc(estimated_size);
     if (!json) {
-        return safe_strdup("{\"version\":0,\"tokens\":[]}");
+        return safe_strdup("out of memory");
     }
     
     // Start building JSON
-    size_t pos = snprintf(json, estimated_size, "{\"version\":%d,\"tokens\":[", scan_result->version);
+    size_t pos = snprintf(json, estimated_size, "{\"version\":%d,\"tokens\":[", PG_VERSION_NUM);
     
-    for (size_t i = 0; i < scan_result->n_tokens; i++) {
-        PgQuery__ScanToken *token = scan_result->tokens[i];
+    for (int i = 0; i < scan_result->n_tokens; i++) {
+        const PgQueryScanToken *token = &scan_result->tokens[i];
         
         // Extract token text from original SQL
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0; // Safety check
         
         char* token_text = safe_malloc(token_length + 1);
-        if (!token_text) continue;
+        if (!token_text) {
+            free(json);
+            return safe_strdup("out of memory");
+        }
         
         if (token_length > 0) {
             strncpy(token_text, &original_sql[token->start], token_length);
@@ -315,7 +322,8 @@ static char* build_scan_json(PgQuery__ScanResult *scan_result, const char* origi
         char* escaped_text = safe_malloc(token_length * 2 + 1);
         if (!escaped_text) {
             free(token_text);
-            continue;
+            free(json);
+            return safe_strdup("out of memory");
         }
         
         int escaped_pos = 0;
@@ -376,29 +384,17 @@ char* wasm_scan(const char* input) {
         return safe_strdup("Invalid input: query cannot be null or empty");
     }
     
-    PgQueryScanResult result = pg_query_scan(input);
+    PgQueryScanTokensResult result = pg_query_scan_tokens(input);
     
     if (result.error) {
         char* error_msg = safe_strdup(result.error->message);
-        pg_query_free_scan_result(result);
+        pg_query_free_scan_tokens_result(result);
         return error_msg ? error_msg : safe_strdup("Memory allocation failed");
     }
     
-    // Unpack protobuf data
-    PgQuery__ScanResult *scan_result = pg_query__scan_result__unpack(
-        NULL, result.pbuf.len, (void *) result.pbuf.data);
+    char* json_result = build_scan_json(&result, input);
     
-    if (!scan_result) {
-        pg_query_free_scan_result(result);
-        return safe_strdup("Failed to unpack scan result");
-    }
-    
-    // Convert to JSON
-    char* json_result = build_scan_json(scan_result, input);
-    
-    // Clean up
-    pg_query__scan_result__free_unpacked(scan_result, NULL);
-    pg_query_free_scan_result(result);
+    pg_query_free_scan_tokens_result(result);
     
     return json_result ? json_result : safe_strdup("{\"version\":0,\"tokens\":[]}");
 }

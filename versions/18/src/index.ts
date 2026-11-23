@@ -218,6 +218,22 @@ function callWasm(fn: () => number): number {
   }
 }
 
+// libpg_query reports a failed allocation as a plain "out of memory" error and
+// keeps going, but the instance's heap stays grown to the size it reached (WASM
+// memory never shrinks), so load a fresh instance and let this one be freed.
+function outOfMemoryError(): Error {
+  stale = true;
+  instantiate();
+  return new Error('libpg_query ran out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces');
+}
+
+function throwIfErrorString(resultStr: string): void {
+  if (resultStr === 'out of memory') throw outOfMemoryError();
+  if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR') || resultStr.startsWith('stack depth limit exceeded')) {
+    throw new Error(resultStr);
+  }
+}
+
 function ensureLoaded() {
   if (!wasmModule) throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
@@ -328,6 +344,7 @@ export const parse = awaitInit(async (query: string): Promise<ParseResult> => {
       const funcname = funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined;
       const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : undefined;
       
+      if (message === 'out of memory') throw outOfMemoryError();
       throw new SqlError(message, {
         message,
         cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0, // Convert to 0-based
@@ -364,6 +381,7 @@ export const parsePlPgSQL = awaitInit(async (query: string): Promise<ParseResult
     
     // Success is always a JSON object; anything else is an error message
     if (!resultStr.startsWith('{')) {
+      if (resultStr === 'out of memory') throw outOfMemoryError();
       throw new Error(resultStr);
     }
     
@@ -387,9 +405,7 @@ export const fingerprint = awaitInit(async (query: string): Promise<string> => {
     resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return resultStr;
   } finally {
@@ -411,9 +427,7 @@ export const normalize = awaitInit(async (query: string): Promise<string> => {
     resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return resultStr;
   } finally {
@@ -468,6 +482,7 @@ export function parseSync(query: string): ParseResult {
       const funcname = funcnamePtr ? wasmModule.UTF8ToString(funcnamePtr) : undefined;
       const filename = filenamePtr ? wasmModule.UTF8ToString(filenamePtr) : undefined;
       
+      if (message === 'out of memory') throw outOfMemoryError();
       throw new SqlError(message, {
         message,
         cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0, // Convert to 0-based
@@ -507,6 +522,7 @@ export function parsePlPgSQLSync(query: string): ParseResult {
     
     // Success is always a JSON object; anything else is an error message
     if (!resultStr.startsWith('{')) {
+      if (resultStr === 'out of memory') throw outOfMemoryError();
       throw new Error(resultStr);
     }
     
@@ -533,9 +549,7 @@ export function fingerprintSync(query: string): string {
     resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return resultStr;
   } finally {
@@ -560,9 +574,7 @@ export function normalizeSync(query: string): string {
     resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return resultStr;
   } finally {
@@ -584,9 +596,7 @@ export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return JSON.parse(resultStr);
   } finally {
@@ -611,9 +621,7 @@ export function scanSync(query: string): ScanResult {
     resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
     const resultStr = ptrToString(resultPtr);
     
-    if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR')) {
-      throw new Error(resultStr);
-    }
+    throwIfErrorString(resultStr);
     
     return JSON.parse(resultStr);
   } finally {

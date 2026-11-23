@@ -7,9 +7,9 @@ describe("PostgreSQL 18 syntax", () => {
     await loadModule();
   });
 
-  it("should report parser version 180004", async () => {
+  it("should report parser version 180006", async () => {
     const result = await parse("SELECT 1");
-    assert.equal(result.version, 180004);
+    assert.equal(result.version, 180006);
   });
 
   it("should parse RETURNING OLD/NEW aliases", async () => {
@@ -61,7 +61,7 @@ describe("PostgreSQL 18 syntax", () => {
     const result = await scan(
       "UPDATE t SET a = 1 RETURNING OLD.a AS oa, NEW.a AS na"
     );
-    assert.equal(result.version, 180004);
+    assert.equal(result.version, 180006);
     const texts = result.tokens.map((t) => t.text);
     assert.ok(texts.includes("OLD"));
     assert.ok(texts.includes("NEW"));
