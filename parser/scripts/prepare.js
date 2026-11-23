@@ -29,11 +29,10 @@ console.log(`Description: ${config.description}`);
 console.log(`Versions: ${config.versions.join(', ')}`);
 console.log('');
 
-// Ensure wasm directory exists
 const wasmDir = path.join(__dirname, '../wasm');
-if (!fs.existsSync(wasmDir)) {
-  fs.mkdirSync(wasmDir, { recursive: true });
-}
+const esmDir = path.join(wasmDir, 'esm');
+fs.mkdirSync(esmDir, { recursive: true });
+fs.writeFileSync(path.join(esmDir, 'package.json'), '{"type":"module"}\n');
 
 // Helper function to generate template variables
 function generateTemplateVars(versions) {
@@ -45,8 +44,8 @@ function generateTemplateVars(versions) {
   // For TypeScript union: 13 | 14 | 15 | 16 | 17
   const versionUnion = versions.join(' | ');
   
-  // For ESM exports: export * as v13 from './v13/index.js';
-  const versionExports = versions.map(v => `export * as v${v} from './v${v}/index.js';`).join('\n');
+  // For ESM exports: export * as v13 from './v13.js';
+  const versionExports = versions.map(v => `export * as v${v} from './v${v}.js';`).join('\n');
   
   // For CommonJS requires: v13: require('./v13/index.cjs'),
   const versionRequires = versions.map(v => `  v${v}: require('./v${v}/index.cjs')`).join(',\n');
@@ -117,6 +116,14 @@ config.versions.forEach(version => {
     
     if (fs.statSync(sourcePath).isFile()) {
       console.log(`Copying ${file} for v${version}...`);
+      if (file === 'index.js') {
+        const content = fs.readFileSync(sourcePath, 'utf8')
+          .replace(/\.\/libpg-query\.js/g, `../v${version}/libpg-query.js`)
+          .replace(/@pgsql\/types/g, `../v${version}/types/index.js`);
+        fs.writeFileSync(path.join(esmDir, `v${version}.js`), content);
+        return;
+      }
+
       fs.copyFileSync(sourcePath, destPath);
       
       // Update any references to @pgsql/types to use local types
@@ -162,7 +169,7 @@ const templateVars = generateTemplateVars(config.versions);
 
 // Process each template
 const templates = [
-  { template: 'index.js.template', output: 'index.js' },
+  { template: 'index.js.template', output: 'esm/index.js' },
   { template: 'index.cjs.template', output: 'index.cjs' },
   { template: 'index.d.ts.template', output: 'index.d.ts' }
 ];
@@ -180,12 +187,6 @@ templates.forEach(({ template, output }) => {
 
 // Create version-specific export files
 config.versions.forEach(version => {
-  // ESM version
-  const esmContent = `// Re-export everything from the v${version} parser
-export * from './v${version}/index.js';
-`;
-  fs.writeFileSync(path.join(wasmDir, `v${version}.js`), esmContent);
-  
   // CJS version
   const cjsContent = `// Re-export everything from the v${version} parser
 module.exports = require('./v${version}/index.cjs');

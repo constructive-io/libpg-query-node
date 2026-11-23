@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const { versions } = JSON.parse(readFileSync(new URL('../wasm/build-info.json', import.meta.url), 'utf8'));
@@ -20,4 +21,19 @@ describe('ESM entry points', () => {
       assert.equal(mod.parseSync('SELECT 1').stmts.length, 1);
     });
   }
+});
+
+it('imports the root and v18 without module syntax detection', () => {
+  const flags = process.allowedNodeEnvironmentFlags.has('--experimental-detect-module')
+    ? ['--no-experimental-detect-module']
+    : [];
+  execFileSync(process.execPath, [...flags, '--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import { Parser } from '@pgsql/parser';
+    import { loadModule, parseSync } from '@pgsql/parser/v18';
+
+    assert.equal((await new Parser().parse('SELECT 1')).stmts.length, 1);
+    await loadModule();
+    assert.equal(parseSync('SELECT 1').stmts.length, 1);
+  `], { cwd: new URL('..', import.meta.url), stdio: 'inherit' });
 });
