@@ -111,7 +111,7 @@ const parser = new Parser(options?: { version?: 13 | 14 | 15 | 16 | 17 });
 
 #### Properties
 - `version`: The PostgreSQL version used by this parser instance
-- `ready`: A promise that resolves when the parser is fully loaded
+- `ready`: A promise that resolves when the parser is fully loaded or rejects if loading fails. After a failure, the next load attempt replaces it with a new promise.
 
 #### Methods
 

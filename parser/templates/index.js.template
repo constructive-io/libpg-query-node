@@ -15,18 +15,30 @@ export class Parser {
     this.parser = null;
     this._loadPromise = null;
     
-    // Create the ready promise
-    this.ready = new Promise((resolve) => {
+    this._resetReady();
+  }
+
+  _resetReady() {
+    this.ready = new Promise((resolve, reject) => {
       this._resolveReady = resolve;
+      this._rejectReady = reject;
     });
+    // Callers may await loadParser() or parse() without observing ready.
+    this.ready.catch(() => {});
   }
 
   async loadParser() {
     if (this.parser) return;
     
-    // Ensure we only load once
+    // Share the current attempt, but allow a failed attempt to be retried.
     if (!this._loadPromise) {
-      this._loadPromise = this._doLoad();
+      if (!this._rejectReady) this._resetReady();
+      this._loadPromise = this._doLoad().catch((error) => {
+        this._loadPromise = null;
+        this._rejectReady(error);
+        this._rejectReady = null;
+        throw error;
+      });
     }
     
     return this._loadPromise;
@@ -34,11 +46,11 @@ export class Parser {
   
   async _doLoad() {
     const module = await import(`./v${this.version}/index.js`);
-    this.parser = module;
     
-    if (this.parser.loadModule) {
-      await this.parser.loadModule();
+    if (module.loadModule) {
+      await module.loadModule();
     }
+    this.parser = module;
     
     // Resolve the ready promise
     this._resolveReady();
