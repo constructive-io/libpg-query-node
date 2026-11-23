@@ -14,7 +14,6 @@ describe('Parser load retries', () => {
       t.after(() => rmSync(dir, { recursive: true, force: true }));
       const entry = `index.${extension}`;
       copyFileSync(new URL(`../wasm/${entry}`, import.meta.url), join(dir, entry));
-      writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
 
       for (const version of versions) {
         const versionDir = join(dir, `v${version}`);
