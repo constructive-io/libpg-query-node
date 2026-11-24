@@ -272,14 +272,17 @@ static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const c
     }
     
     // Size the buffer from token text length, not token count: each token
-    // contributes at most ~170 bytes of fixed JSON plus up to 2 bytes per input
+    // contributes at most ~170 bytes of fixed JSON plus up to 6 bytes per input
     // byte once escaped.
     size_t estimated_size = 1024;
     for (int i = 0; i < scan_result->n_tokens; i++) {
         const PgQueryScanToken *token = &scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
-        size_t token_size = (size_t) token_length * 2 + 200;
+        if ((size_t) token_length > (SIZE_MAX - 200) / 6) {
+            return safe_strdup("out of memory");
+        }
+        size_t token_size = (size_t) token_length * 6 + 200;
         if (estimated_size > SIZE_MAX - token_size) {
             return safe_strdup("out of memory");
         }
@@ -312,14 +315,14 @@ static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const c
         token_text[token_length] = '\0';
         
         // Escape token text for JSON
-        char* escaped_text = safe_malloc(token_length * 2 + 1);
+        char* escaped_text = safe_malloc((size_t) token_length * 6 + 1);
         if (!escaped_text) {
             free(token_text);
             free(json);
             return safe_strdup("out of memory");
         }
         
-        int escaped_pos = 0;
+        size_t escaped_pos = 0;
         for (int j = 0; j < token_length; j++) {
             char c = token_text[j];
             if (c == '"' || c == '\\') {
@@ -334,6 +337,8 @@ static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const c
             } else if (c == '\t') {
                 escaped_text[escaped_pos++] = '\\';
                 escaped_text[escaped_pos++] = 't';
+            } else if ((unsigned char) c < 0x20) {
+                escaped_pos += snprintf(escaped_text + escaped_pos, 7, "\\u%04x", (unsigned int) c);
             } else {
                 escaped_text[escaped_pos++] = c;
             }
