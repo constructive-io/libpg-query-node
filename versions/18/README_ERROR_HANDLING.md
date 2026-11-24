@@ -6,7 +6,7 @@ Version 18 includes enhanced error handling that provides detailed information a
 
 ## Error Details
 
-When a parsing error occurs, the error object now includes a `sqlDetails` property with the following information:
+PostgreSQL errors from `parse`, `fingerprint`, `normalize`, and `scan` (including their sync variants) throw a `SqlError` with a `sqlDetails` property:
 
 ```typescript
 interface SqlErrorDetails {

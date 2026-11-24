@@ -1,6 +1,9 @@
 const { describe, it, before } = require("node:test");
 const assert = require("node:assert");
-const { parse, parseSync, parsePlPgSQL, scan, loadModule } = require("../");
+const {
+  parse, parseSync, parsePlPgSQL, scan, scanSync, loadModule, SqlError,
+  fingerprint, fingerprintSync, normalize, normalizeSync
+} = require("../");
 
 describe("PostgreSQL 18 syntax", () => {
   before(async () => {
@@ -66,4 +69,48 @@ describe("PostgreSQL 18 syntax", () => {
     assert.ok(texts.includes("OLD"));
     assert.ok(texts.includes("NEW"));
   });
+});
+
+describe("PostgreSQL 18 structured SQL errors", () => {
+  before(async () => {
+    await loadModule();
+  });
+
+  const lexerError = {
+    sql: "SELECT 'abc",
+    message: /unterminated quoted string/,
+    fileName: /scan\.l$/,
+    cursorPosition: 7
+  };
+  const grammarError = {
+    sql: "SELECT percentile_cont(p ORDER BY p) WITHIN GROUP (ORDER BY x) FROM t",
+    message: /cannot use multiple ORDER BY clauses with WITHIN GROUP/,
+    fileName: /gram\.y$/
+  };
+
+  for (const [run, runSync, cases] of [
+    [fingerprint, fingerprintSync, [lexerError, grammarError]],
+    [normalize, normalizeSync, [lexerError, grammarError]],
+    [scan, scanSync, [lexerError]]
+  ]) {
+    it(`${runSync.name} throws and its async counterpart rejects with SqlError`, async () => {
+      for (const { sql, message, fileName, cursorPosition } of cases) {
+        const checkError = (error) => {
+          assert.ok(error instanceof SqlError);
+          assert.match(error.message, message);
+          const details = error.sqlDetails;
+          assert.equal(details.message, error.message);
+          assert.match(details.fileName, fileName);
+          assert.ok(details.functionName);
+          assert.ok(details.lineNumber > 0);
+          if (cursorPosition !== undefined) {
+            assert.equal(details.cursorPosition, cursorPosition);
+          }
+          return true;
+        };
+        assert.throws(() => runSync(sql), checkError);
+        await assert.rejects(run(sql), checkError);
+      }
+    });
+  }
 });

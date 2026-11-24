@@ -120,6 +120,7 @@ interface WasmModule {
   _malloc: (size: number) => number;
   _free: (ptr: number) => void;
   _wasm_free_string: (ptr: number) => void;
+  _wasm_free_detailed_result: (ptr: number) => void;
   _wasm_parse_query: (queryPtr: number) => number;
   _wasm_parse_query_raw: (queryPtr: number) => number;
   _wasm_free_parse_result: (ptr: number) => void;
@@ -220,13 +221,6 @@ function outOfMemoryError(): Error {
   return new Error('libpg_query ran out of WASM memory (heap limit is WASM_MAXIMUM_MEMORY, 1 GiB); parse large inputs in smaller pieces');
 }
 
-function throwIfErrorString(resultStr: string): void {
-  if (resultStr === 'out of memory') throw outOfMemoryError();
-  if (resultStr.startsWith('syntax error') || resultStr.startsWith('deparse error') || resultStr.startsWith('ERROR') || resultStr.startsWith('stack depth limit exceeded')) {
-    throw new Error(resultStr);
-  }
-}
-
 function ensureLoaded() {
   if (!wasmModule) throw new Error("WASM module not initialized. Call `loadModule()` first.");
 }
@@ -298,6 +292,52 @@ function ptrToString(ptr: number): string {
     throw new TypeError(`Expected a number, got ${typeof ptr}`);
   }
   return wasmModule.UTF8ToString(ptr);
+}
+
+type DetailedOperation = '_wasm_fingerprint' | '_wasm_normalize_query' | '_wasm_scan';
+
+function callDetailed(query: string, operation: DetailedOperation): string {
+  if (!wasmModule) {
+    throw new Error('WASM module not initialized. Call loadModule() first.');
+  }
+  const queryPtr = stringToPtr(query);
+  const failuresBefore = failures;
+  let resultPtr = 0;
+
+  try {
+    resultPtr = callWasm(() => wasmModule[operation](queryPtr));
+    if (!resultPtr) throw outOfMemoryError();
+
+    // WasmDetailedResult uses 32-bit fields and pointers.
+    if (wasmModule.getValue(resultPtr, 'i32')) {
+      const readString = (offset: number) => {
+        const ptr = wasmModule.getValue(resultPtr + offset, 'i32');
+        return ptr ? wasmModule.UTF8ToString(ptr) : undefined;
+      };
+      const message = readString(4) ?? 'Unknown error';
+      if (message === 'out of memory') throw outOfMemoryError();
+
+      const lineno = wasmModule.getValue(resultPtr + 16, 'i32');
+      const cursorpos = wasmModule.getValue(resultPtr + 20, 'i32');
+      const context = readString(24);
+      throw new SqlError(message, {
+        message,
+        cursorPosition: cursorpos > 0 ? cursorpos - 1 : 0,
+        fileName: readString(12),
+        functionName: readString(8),
+        lineNumber: lineno > 0 ? lineno : undefined,
+        ...(context !== undefined ? { context } : {})
+      });
+    }
+    return wasmModule.UTF8ToString(wasmModule.getValue(resultPtr + 28, 'i32'));
+  } finally {
+    if (failures === failuresBefore) {
+      wasmModule._free(queryPtr);
+      if (resultPtr) {
+        wasmModule._wasm_free_detailed_result(resultPtr);
+      }
+    }
+  }
 }
 
 export const parse = awaitInit(async (query: string): Promise<ParseResult> => {
@@ -390,47 +430,11 @@ export const parsePlPgSQL = awaitInit(async (query: string): Promise<ParseResult
 });
 
 export const fingerprint = awaitInit(async (query: string): Promise<string> => {
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return resultStr;
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
+  return callDetailed(query, '_wasm_fingerprint');
 });
 
 export const normalize = awaitInit(async (query: string): Promise<string> => {
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return resultStr;
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
+  return callDetailed(query, '_wasm_normalize_query');
 });
 
 // Sync versions
@@ -531,98 +535,17 @@ export function parsePlPgSQLSync(query: string): ParseResult {
 }
 
 export function fingerprintSync(query: string): string {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_fingerprint(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return resultStr;
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
+  return callDetailed(query, '_wasm_fingerprint');
 }
 
 export function normalizeSync(query: string): string {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_normalize_query(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return resultStr;
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
+  return callDetailed(query, '_wasm_normalize_query');
 }
 
 export const scan = awaitInit(async (query: string): Promise<ScanResult> => {
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return JSON.parse(resultStr);
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
+  return JSON.parse(callDetailed(query, '_wasm_scan'));
 });
 
 export function scanSync(query: string): ScanResult {
-  if (!wasmModule) {
-    throw new Error('WASM module not initialized. Call loadModule() first.');
-  }
-  const queryPtr = stringToPtr(query);
-  const failuresBefore = failures;
-  let resultPtr = 0;
-  
-  try {
-    resultPtr = callWasm(() => wasmModule._wasm_scan(queryPtr));
-    const resultStr = ptrToString(resultPtr);
-    
-    throwIfErrorString(resultStr);
-    
-    return JSON.parse(resultStr);
-  } finally {
-    if (failures === failuresBefore) {
-      wasmModule._free(queryPtr);
-      if (resultPtr) {
-        wasmModule._wasm_free_string(resultPtr);
-      }
-    }
-  }
-} 
+  return JSON.parse(callDetailed(query, '_wasm_scan'));
+}
