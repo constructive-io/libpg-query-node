@@ -81,6 +81,22 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(queued.value.stmts.length, 1);
   });
 
+  it('waits for a large heap when sync parsing fails after async recovery is queued', async () => {
+    const isolated = loadTrapping();
+    await isolated.loadModule();
+    isolated.trapNext();
+    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
+    const queued = isolated.parse('SELECT 1');
+
+    let yielded = false;
+    setTimeout(() => { yielded = true; }, 0);
+    isolated.trapNext(1024 ** 3);
+    assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
+
+    assert.equal((await queued).stmts.length, 1);
+    assert.equal(yielded, true, 'async recovery skipped the large-heap yield');
+  });
+
   it('throws an Error and recovers synchronously when the memory limit is hit', () => {
     const exitCode = process.exitCode;
     assert.throws(() => parseSync('SELECT 1;\n'.repeat(5000000)), (error) => {
@@ -318,16 +334,17 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
 // for a WASM trap now that libpg_query returns stack depth errors instead.
 // failLoad() is called on each load; a true result rejects that load.
 function loadTrapping(failLoad) {
-  let trap = false;
+  let trapHeapSize;
   const isolated = loadIsolated((module) => {
     const parseRaw = module._wasm_parse_query_raw;
     module._wasm_parse_query_raw = (...callArgs) => {
-      if (!trap) return parseRaw(...callArgs);
-      trap = false;
+      if (trapHeapSize === undefined) return parseRaw(...callArgs);
+      if (trapHeapSize) module.HEAPU8 = { length: trapHeapSize };
+      trapHeapSize = undefined;
       throw new RangeError('Maximum call stack size exceeded');
     };
   }, failLoad);
-  isolated.trapNext = () => { trap = true; };
+  isolated.trapNext = (heapSize = 0) => { trapHeapSize = heapSize; };
   return isolated;
 }
 

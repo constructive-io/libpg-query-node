@@ -166,7 +166,8 @@ function createSync(module: WasmCompiledModule): WasmModule {
 
 function instantiate(): Promise<void> {
   if (loading) return loading;
-  const promise = (largeHeapYield ?? Promise.resolve()).then(async () => {
+  const promise = Promise.resolve().then(async () => {
+    while (!wasmModule && largeHeapYield) await largeHeapYield;
     if (!wasmModule) {
       wasmModule = compiledWasm ? createSync(compiledWasm) : await PgQueryModule();
       compiledWasm = wasmModule.compiledWasm;
