@@ -151,6 +151,7 @@ let failures = 0;
 const LARGE_HEAP_BYTES = 512 * 1024 * 1024;
 let largeFailures = 0;
 let memoryLimitError: Error | undefined;
+let largeHeapYield: Promise<void> | undefined;
 
 function createSync(module: WasmCompiledModule): WasmModule {
   const options: Partial<WasmModule> & { readySync?: boolean; initError?: unknown } = {
@@ -165,7 +166,7 @@ function createSync(module: WasmCompiledModule): WasmModule {
 
 function instantiate(): Promise<void> {
   if (loading) return loading;
-  const promise = Promise.resolve().then(async () => {
+  const promise = (largeHeapYield ?? Promise.resolve()).then(async () => {
     if (!wasmModule) {
       wasmModule = compiledWasm ? createSync(compiledWasm) : await PgQueryModule();
       compiledWasm = wasmModule.compiledWasm;
@@ -181,6 +182,11 @@ instantiate();
 
 function invalidateModule(error: unknown): void {
   if (wasmModule.HEAPU8.length > LARGE_HEAP_BYTES) {
+    // Async callers can give V8 a task to release the dropped heap before allocating again.
+    largeHeapYield ??= new Promise<void>((resolve) => setTimeout(() => {
+      largeHeapYield = undefined;
+      resolve();
+    }, 0));
     if (++largeFailures === 1) {
       queueMicrotask(() => {
         largeFailures = 0;
@@ -274,6 +280,7 @@ export async function loadModule(...args: [options?: LoadModuleOptions]): Promis
       : await WebAssembly.compile(wasm as ArrayBuffer | ArrayBufferView);
     // An instance loaded from the file, or still loading, is replaced by one from `wasm`.
     await loading?.catch(() => {});
+    if (largeHeapYield) await largeHeapYield;
     wasmModule = createSync(module);
     compiledWasm = module;
   }

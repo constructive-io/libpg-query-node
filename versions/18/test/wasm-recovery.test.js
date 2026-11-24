@@ -44,11 +44,13 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
           await lib.loadModule();
         }
         const huge = 'SELECT 1;\\n'.repeat(5000000);
+        let yielded = false;
+        setTimeout(() => { yielded = true; }, 0);
         const errors = [];
-        for (const fn of [lib.parse, lib.normalizeSync]) {
-          try { await fn(huge); } catch (error) { errors.push(error); }
-        }
+        try { await lib.parse(huge); } catch (error) { errors.push(error); }
         await lib.loadModule();
+        if (!yielded) throw new Error('Async recovery did not yield after a large heap failure');
+        try { lib.normalizeSync(huge); } catch (error) { errors.push(error); }
         lib.parseSync('SELECT 1');
         // V8 frees a dropped instance's memory on a later task, not in the same microtask run.
         await new Promise((resolve) => setTimeout(resolve, 0));
