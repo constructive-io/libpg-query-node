@@ -1,4 +1,4 @@
-// Keep Emscripten's compiled module so recovery uses its original asset load.
+// Keep the module from the pinned Emscripten factory's own asset load.
 if (!Module['compiledWasm']) {
   var instantiateFromAsset = instantiateAsync;
   instantiateAsync = async (...args) => {
