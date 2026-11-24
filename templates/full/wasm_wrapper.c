@@ -266,23 +266,40 @@ static const char* get_keyword_name(PgQueryKeywordKind keyword_kind) {
     }
 }
 
+static size_t scan_json_escaped_length(const char* text, int length) {
+    size_t escaped_length = 0;
+    for (int i = 0; i < length; i++) {
+        unsigned char c = text[i];
+        size_t width;
+        if (c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t') {
+            width = 2;
+        } else {
+            width = c < 0x20 ? 6 : 1;
+        }
+        if (escaped_length > SIZE_MAX - width) {
+            return SIZE_MAX;
+        }
+        escaped_length += width;
+    }
+    return escaped_length;
+}
+
 static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const char* original_sql) {
     if (!scan_result || !original_sql) {
         return safe_strdup("{\"version\":0,\"tokens\":[]}");
     }
     
-    // Size the buffer from token text length, not token count: each token
-    // contributes at most ~170 bytes of fixed JSON plus up to 6 bytes per input
-    // byte once escaped.
+    // Reserve space for each token's escaped text and fixed JSON fields.
     size_t estimated_size = 1024;
     for (int i = 0; i < scan_result->n_tokens; i++) {
         const PgQueryScanToken *token = &scan_result->tokens[i];
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0;
-        if ((size_t) token_length > (SIZE_MAX - 200) / 6) {
+        size_t escaped_length = scan_json_escaped_length(&original_sql[token->start], token_length);
+        if (escaped_length > SIZE_MAX - 200) {
             return safe_strdup("out of memory");
         }
-        size_t token_size = (size_t) token_length * 6 + 200;
+        size_t token_size = escaped_length + 200;
         if (estimated_size > SIZE_MAX - token_size) {
             return safe_strdup("out of memory");
         }
@@ -303,7 +320,7 @@ static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const c
         int token_length = token->end - token->start;
         if (token_length < 0) token_length = 0; // Safety check
         
-        char* token_text = safe_malloc(token_length + 1);
+        char* token_text = safe_malloc((size_t) token_length + 1);
         if (!token_text) {
             free(json);
             return safe_strdup("out of memory");
@@ -315,7 +332,8 @@ static char* build_scan_json(const PgQueryScanTokensResult *scan_result, const c
         token_text[token_length] = '\0';
         
         // Escape token text for JSON
-        char* escaped_text = safe_malloc((size_t) token_length * 6 + 1);
+        size_t escaped_length = scan_json_escaped_length(token_text, token_length);
+        char* escaped_text = safe_malloc(escaped_length + 1);
         if (!escaped_text) {
             free(token_text);
             free(json);
