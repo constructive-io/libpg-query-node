@@ -207,15 +207,23 @@ function callWasm(fn: () => number): number {
     return fn();
   } catch (error) {
     if (proc) proc.exitCode = exitCode;
-    invalidateModule(error);
-    if (error instanceof Error) throw error;
+    if (error instanceof Error) {
+      invalidateModule(error);
+      throw error;
+    }
     const reason = typeof error === 'object' && error !== null
       ? ((error as any).message ?? (error as any).constructor?.name)
       : error;
-    throw new Error(
+    // Emscripten's ExitStatus keeps its loader closure and WASM heap alive.
+    const cause = typeof error === 'object' && error !== null && 'name' in error && error.name === 'ExitStatus'
+      ? { ...error }
+      : error;
+    const wrapped = new Error(
       `libpg_query terminated (${reason}), most likely out of WASM memory; parse large inputs in smaller pieces`,
-      { cause: error }
+      { cause }
     );
+    invalidateModule(wrapped);
+    throw wrapped;
   }
 }
 

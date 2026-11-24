@@ -31,7 +31,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
-  it('frees each replaced instance, so WASM memory stays at one instance', () => {
+  it('frees replaced WASM heaps even when callers keep the errors', () => {
     const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
       (async () => {
         await lib.loadModule();
@@ -44,14 +44,18 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
           await lib.loadModule();
         }
         const huge = 'SELECT 1;\\n'.repeat(5000000);
-        for (let i = 0; i < 2; i++) {
-          try { await lib.parse(huge); } catch {}
+        const errors = [];
+        for (const fn of [lib.parse, lib.normalizeSync]) {
+          try { await fn(huge); } catch (error) { errors.push(error); }
         }
         await lib.loadModule();
         lib.parseSync('SELECT 1');
         // V8 frees a dropped instance's memory on a later task, not in the same microtask run.
         await new Promise((resolve) => setTimeout(resolve, 0));
         gc(); gc();
+        if (errors.length !== 2 || errors.some((error) => !error.message.includes('out of WASM memory'))) {
+          throw new Error('Expected two WASM memory failures');
+        }
         process.stdout.write('\\ngrown=' + (process.memoryUsage().external - base));
       })();`;
     // A non-zero exit code (libpg_query's exit() leaking out) makes execFileSync throw.
@@ -61,7 +65,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     const grown = Number(output.match(/^grown=(-?\d+)$/m)?.[1]);
-    assert.ok(grown < 32 * 1024 * 1024, `WASM memory grew by ${grown} bytes after 32 replacements`);
+    assert.ok(grown < 32 * 1024 * 1024, `WASM memory grew by ${grown} bytes after recovery`);
   });
 
   it('lets a call queued behind a failing one wait for the fresh instance', async () => {
@@ -302,7 +306,8 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
       const caught = await failOnce(name, query, thrown);
       assert.ok(caught instanceof Error);
       assert.match(caught.message, /out of WASM memory/);
-      assert.equal(caught.cause, thrown);
+      assert.notEqual(caught.cause, thrown);
+      assert.deepEqual(caught.cause, thrown);
     });
   }
 });
