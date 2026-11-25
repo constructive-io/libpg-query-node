@@ -34,6 +34,6 @@
   },
   "keywords": [],
   "devDependencies": {
-    "pg-proto-parser": "^1.28.2"
+    "pg-proto-parser": "1.32.10"
   }
 }
