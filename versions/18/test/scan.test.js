@@ -303,5 +303,16 @@ comment */ SELECT 2`;
         assert.equal(t.text, `$$${literal}$$`);
       }
     });
+
+    it("should preserve control characters in literals and comments in both scan APIs", async () => {
+      const controls = Array.from({ length: 31 }, (_, i) => String.fromCharCode(i + 1)).join("");
+      const literal = `$$${controls.repeat(128)}$$`;
+      const comment = `/* ${controls} */`;
+      const sql = `SELECT ${literal} ${comment};`;
+
+      for (const { tokens } of [query.scanSync(sql), await query.scan(sql)]) {
+        assert.deepEqual(tokens.map(t => t.text), ["SELECT", literal, comment, ";"]);
+      }
+    });
   });
 });
