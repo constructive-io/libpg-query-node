@@ -12,3 +12,27 @@
 // `loadModule({ wasm })` can use the bytes it was given.
 if (ENVIRONMENT_IS_NODE && typeof __dirname == 'undefined') ENVIRONMENT_IS_NODE = false;
 if (ENVIRONMENT_IS_WORKER && !globalThis.self?.location) ENVIRONMENT_IS_WORKER = false;
+
+// Keep the module from the pinned Emscripten factory's own asset load.
+if (!Module['compiledWasm']) {
+  var instantiateFromAsset = instantiateAsync;
+  instantiateAsync = async (...args) => {
+    var result = await instantiateFromAsset(...args);
+    Module['compiledWasm'] = result.module;
+    return result;
+  };
+} else {
+  Module['instantiateWasm'] = (imports, receive) => {
+    try {
+      receive(new WebAssembly.Instance(Module['compiledWasm'], imports));
+      // This build has no main or startup hooks. Initialize libc and stdio
+      // now, then skip the deferred run() so it cannot initialize them twice.
+      initRuntime();
+      run = () => {};
+      Module['readySync'] = true;
+    } catch (error) {
+      Module['initError'] = error;
+      throw error;
+    }
+  };
+}

@@ -73,17 +73,21 @@ describe('loadModule({ wasm }) when the wrapper cannot read libpg-query.wasm', {
     assert.deepEqual(result, { fromModule: 1, fromView: 2 });
   });
 
-  it('creates the replacement from the bytes after out-of-memory failures', () => {
+  it('recovers from supplied bytes and caps repeated OOMs until the caller yields', () => {
     const result = withoutWasmFile(`
       await lib.loadModule({ wasm: bytes });
       const huge = 'SELECT 1;\\n'.repeat(5000000);
       const messages = [];
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         try { lib.parseSync(huge); } catch (e) { messages.push(e.message); }
       }
-      return { messages, after: (await lib.parse('SELECT 1')).stmts.length };
+      let capped;
+      try { lib.parseSync('SELECT 1'); } catch (e) { capped = e.message; }
+      return { messages, capped, after: (await lib.parse('SELECT 1')).stmts.length };
     `);
-    assert.equal(result.messages.length, 3);
+    assert.equal(result.messages.length, 2);
+    for (const message of result.messages) assert.match(message, /out of WASM memory/);
+    assert.match(result.capped, /yield \(await\) before retrying/);
     assert.equal(result.after, 1);
   });
 

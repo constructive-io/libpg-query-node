@@ -66,7 +66,7 @@ const TEMPLATE_FILES = [
   { src: 'wasm_wrapper.c', dest: 'src/wasm_wrapper.c', header: HEADER, hasFullVariant: true },
   { src: 'libpg-query.d.ts', dest: 'src/libpg-query.d.ts', header: HEADER, hasFullVariant: true },
   { src: 'index.ts', dest: 'src/index.ts', header: HEADER, hasFullVariant: true },
-  { src: 'pre.js', dest: 'src/pre.js', header: HEADER, hasFullVariant: false }
+  { src: 'pre.js', dest: 'src/pre.js', header: HEADER, appendFullVariant: true }
 ];
 
 const SLIM_EXPORTED_FUNCTIONS = "['_malloc','_free','_wasm_parse_query_raw','_wasm_free_parse_result']";
@@ -96,6 +96,9 @@ function copyTemplates() {
       
       // Read template content
       let content = fs.readFileSync(srcPath, 'utf8');
+      if (config.fullApi && file.appendFullVariant) {
+        content += '\n' + fs.readFileSync(path.join(templatesDir, 'full', file.src), 'utf8');
+      }
       
       // Add header if specified
       if (file.header) {

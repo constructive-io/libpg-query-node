@@ -37,10 +37,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install cmake python3 python3-pip
-          git clone --branch 3.1.59 --depth 1 https://github.com/emscripten-core/emsdk.git
+          git clone --branch 6.0.3 --depth 1 https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install 3.1.59
-          ./emsdk activate 3.1.59
+          ./emsdk install 6.0.3
+          ./emsdk activate 6.0.3
           source ./emsdk_env.sh
         working-directory: versions/18
       - name: Build with Emscripten 🏗
