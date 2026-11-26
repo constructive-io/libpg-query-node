@@ -20,7 +20,7 @@ const cases = [
   ['Normalize subqueries', 'normalizeSync', subqueries, 100, 10000],
 ];
 
-async function openParser(browser, dir) {
+async function bundleParser(dir) {
   const { outputFiles } = await build({
     entryPoints: [path.join(dir, 'index.js')],
     bundle: true,
@@ -29,12 +29,16 @@ async function openParser(browser, dir) {
     external: ['node:*'],
     write: false,
   });
+  return outputFiles[0].text;
+}
+
+async function openParser(browser, dir, script) {
   const page = await browser.newPage();
   const origin = 'http://libpg-query.test';
   await page.route(origin + '/**', (route) => {
     switch (new URL(route.request().url()).pathname) {
       case '/': return route.fulfill({ contentType: 'text/html', body: '<!doctype html>' });
-      case '/parser.js': return route.fulfill({ contentType: 'text/javascript', body: outputFiles[0].text });
+      case '/parser.js': return route.fulfill({ contentType: 'text/javascript', body: script });
       case '/libpg-query.wasm': return route.fulfill({
         contentType: 'application/wasm', path: path.join(dir, 'libpg-query.wasm'),
       });
@@ -142,11 +146,21 @@ for (const [name, engine] of Object.entries(engines)) {
   test(name, { timeout: 360000 }, async (t) => {
     const browser = await engine.launch();
     t.after(() => browser.close());
-    const pages = Object.fromEntries(await Promise.all(Object.entries(builds).map(async ([version, dir]) =>
-      [version, await openParser(browser, dir)])));
+    const bundles = await Promise.all(Object.entries(builds).map(async ([version, dir]) =>
+      [version, dir, await bundleParser(dir)]));
+    const openPages = async (subtest) => Object.fromEntries(await Promise.all(
+      bundles.map(async ([version, dir, script]) => {
+        const page = await openParser(browser, dir, script);
+        subtest.after(() => page.context().close());
+        return [version, page];
+      })
+    ));
     const rows = [`| ${name} ${browser.version()} | ${baseline} | Candidate |`, '| --- | ---: | ---: |'];
     for (const [label, method, sql, floor, ceiling] of cases) {
-      await t.test(label, async () => {
+      await t.test(label, async (subtest) => {
+        // Don't retain browser resources from earlier searches. Each search
+        // reloads the page and instantiates a fresh WASM heap for each probe.
+        const pages = await openPages(subtest);
         const run = version => measure(pages[version], version, label, method, sql, floor, ceiling);
         let published = await run(baseline);
         let candidate = await run('candidate');
@@ -191,7 +205,8 @@ for (const [name, engine] of Object.entries(engines)) {
     const summary = rows.join('\n') + '\n';
     console.log('\n' + summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
-    await t.test('recovers after synchronous and asynchronous overflows', async () => {
+    await t.test('recovers after synchronous and asynchronous overflows', async (subtest) => {
+      const pages = await openPages(subtest);
       for (const [version, page] of Object.entries(pages)) {
         const query = chained(32000);
         // 18.1.5 reuses an instance after a host overflow. Measure recovery from
