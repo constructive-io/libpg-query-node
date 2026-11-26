@@ -171,13 +171,13 @@ pnpm run test
   pnpm run clean && pnpm run build && pnpm run test
   ```
 
-### Release diff
+### Release diff (local only)
 
-CI runs every pgsql-parser kitchen-sink and PL/pgSQL fixture, a set of deep and
-large generated inputs, and the PG 18 test suite through the last published
-`libpg-query` (`pg18` dist-tag) and the candidate build in `versions/18/wasm/`.
-Any output or error that changed fails the job unless
-`versions/18/release-diff.allow.json` names it with a reason.
+A tool for investigating a build, not part of CI. It runs every pgsql-parser
+kitchen-sink and PL/pgSQL fixture, a set of deep and large generated inputs,
+and the PG 18 test suite through the last published `libpg-query` (`pg18`
+dist-tag) and the build in `versions/18/wasm/`, and lists each output or error
+that changed and is not named in `versions/18/release-diff.allow.json`.
 
 ```bash
 pnpm run release-diff --major 18
