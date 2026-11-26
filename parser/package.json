@@ -6,9 +6,6 @@
   "main": "./wasm/index.cjs",
   "module": "./wasm/index.js",
   "types": "./wasm/index.d.ts",
-  "engines": {
-    "node": ">=22"
-  },
   "exports": {
     ".": {
       "import": "./wasm/index.js",
