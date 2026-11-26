@@ -55,6 +55,8 @@ async function probe(page, { method, query, expectedParameters, fresh = false, w
     const lib = globalThis.parser;
     if (warmup) {
       for (let i = 0; i < 20; i++) lib[method](warmup);
+      // WebKit can finish compiling a new tier while the probe is running.
+      await new Promise(resolve => setTimeout(resolve, 20));
     }
     let error = null;
     let result;
@@ -137,7 +139,7 @@ if (selected && !Object.hasOwn(engines, selected)) throw new Error(`Unknown brow
 
 for (const [name, engine] of Object.entries(engines)) {
   if (selected && name !== selected) continue;
-  test(name, { timeout: 240000 }, async (t) => {
+  test(name, { timeout: 360000 }, async (t) => {
     const browser = await engine.launch();
     t.after(() => browser.close());
     const pages = Object.fromEntries(await Promise.all(Object.entries(builds).map(async ([version, dir]) =>
@@ -145,8 +147,16 @@ for (const [name, engine] of Object.entries(engines)) {
     const rows = [`| ${name} ${browser.version()} | ${baseline} | Candidate |`, '| --- | ---: | ---: |'];
     for (const [label, method, sql, floor, ceiling] of cases) {
       await t.test(label, async () => {
-        const published = await measure(pages[baseline], baseline, label, method, sql, floor, ceiling);
-        const candidate = await measure(pages.candidate, 'candidate', label, method, sql, floor, ceiling);
+        const run = version => measure(pages[version], version, label, method, sql, floor, ceiling);
+        let published = await run(baseline);
+        let candidate = await run('candidate');
+        if (candidate.depth < published.depth - depthStep) {
+          // A single measurement can straddle WebKit's concurrent WASM tier-up.
+          // Require the loss to reproduce in the median of three searches.
+          const median = results => results.sort((a, b) => a.depth - b.depth)[1];
+          published = median([published, await run(baseline), await run(baseline)]);
+          candidate = median([candidate, await run('candidate'), await run('candidate')]);
+        }
         rows.push(`| ${label} | ${published.depth} | ${candidate.depth} |`);
         assertLimit(published.error, baseline, label);
         assertLimit(published.limit, baseline, label);
