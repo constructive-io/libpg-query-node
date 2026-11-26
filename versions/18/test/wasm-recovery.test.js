@@ -99,8 +99,9 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
         gc(); gc();
         const base = process.memoryUsage().external;
         const deep = 'SELECT 1' + '+1'.repeat(100000);
+        const kept = [];
         for (let i = 0; i < 30; i++) {
-          try { lib.parseSync(deep); } catch {}
+          try { lib.parseSync(deep); } catch (error) { kept.push(error); }
           await lib.loadModule();
         }
         const huge = 'SELECT 1;\\n'.repeat(5000000);
