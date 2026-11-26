@@ -161,7 +161,9 @@ if (selected && !Object.hasOwn(engines, selected)) throw new Error(`Unknown brow
 
 for (const [name, engine] of Object.entries(engines)) {
   if (selected && name !== selected) continue;
-  test(name, { timeout: 360000 }, async (t) => {
+  // The published normalizer's subquery probes can each take over 15s on
+  // macOS WebKit. Leave time for those probes without relaxing their checks.
+  test(name, { timeout: 600000 }, async (t) => {
     const browser = await engine.launch();
     t.after(() => browser.close());
     const bundles = await Promise.all(Object.entries(builds).map(async ([version, dir]) =>
