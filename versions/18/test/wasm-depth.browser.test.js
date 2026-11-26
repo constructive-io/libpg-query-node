@@ -163,10 +163,15 @@ for (const [name, engine] of Object.entries(engines)) {
         assert.ok(candidate.depth >= published.depth - depthStep,
           `${label}: depth fell from ${published.depth} to ${candidate.depth}`);
         if (method === 'normalizeSync') {
-          const overflow = await probe(pages.candidate, { method, query: sql(ceiling), fresh: true });
-          assertLimit(overflow, 'candidate', label, publishedDiagnostic);
+          const page = pages.candidate;
+          const warmup = sql(floor);
+          assert.equal(await probe(page, { method, query: warmup, warmup, fresh: true }), null);
+          // A grammar error may leave the original instance intact. Force a
+          // host overflow after warming the code, then exercise the replacement.
+          const overflow = await probe(page, { method: 'parseSync', query: chained(32000) });
+          assertLimit(overflow, 'candidate', label);
           const depth = Math.max(floor, published.depth - depthStep);
-          const afterOverflow = await probe(pages.candidate, {
+          const afterOverflow = await probe(page, {
             method, query: sql(depth), expectedParameters: sql === chained ? depth + 1 : 1,
           });
           assert.equal(afterOverflow, null, `${label}: cannot reach published depth after overflow`);
