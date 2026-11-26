@@ -1,3 +1,45 @@
 {
-  "allow": []
+  "allow": [
+    {
+      "id": [
+        "edge:*:parse",
+        "edge:*:normalize",
+        "edge:*:fingerprint"
+      ],
+      "baseline": "18.2.7",
+      "published": "stack depth limit exceeded",
+      "candidate": "ok",
+      "reason": "18.2.7 capped the stack depth check at 512 kB of the WASM stack; the check now uses the whole stack, so deep SQL parses again as in 18.1.5"
+    },
+    {
+      "id": [
+        "edge:*:parse",
+        "edge:*:scan"
+      ],
+      "baseline": "18.2.7",
+      "published": "stack depth limit exceeded",
+      "candidate": "RangeError: Maximum call stack size exceeded",
+      "reason": "Same change: the candidate parses these now, and the RangeError is this script's JSON.stringify overflowing on the very deep parse tree"
+    },
+    {
+      "id": "edge:plpgsql-*:parsePlPgSQL",
+      "baseline": "18.2.7",
+      "published": "Error: stack depth limit exceeded",
+      "candidate": "ok",
+      "reason": "The 512 kB cap stopped PL/pgSQL at about 350 nested blocks; without it they parse again as in 18.1.5"
+    },
+    {
+      "id": [
+        "edge:*:parse",
+        "edge:*:normalize",
+        "edge:*:fingerprint",
+        "edge:*:scan",
+        "edge:plpgsql-*:parsePlPgSQL"
+      ],
+      "baseline": "18.2.7",
+      "published": "RangeError: Maximum call stack size exceeded",
+      "candidate": "stack depth limit exceeded",
+      "reason": "A host stack overflow inside the parser or JSON.parse is now reported as a stack depth error instead of a raw RangeError"
+    }
+  ]
 }

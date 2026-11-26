@@ -19,7 +19,7 @@ WASM_STACK_SIZE ?= 33554432
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
 LIBPG_QUERY_TAG := 18-constructive
-LIBPG_QUERY_COMMIT := 7791971be1fc169d3f1b0d1ec887dc3f134ad134
+LIBPG_QUERY_COMMIT := f9f1b676f629a831bd2c5f7b34a2dc41d9cdf967
 
 CACHE_DIR := .cache
 
