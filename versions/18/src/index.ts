@@ -260,6 +260,15 @@ function outOfMemoryError(): Error {
   return error;
 }
 
+function plpgsqlError(message: string): Error {
+  if (message === 'out of memory') return outOfMemoryError();
+  // The PL/pgSQL C API gives the JS wrapper only the diagnostic text.
+  if (message === 'stack depth limit exceeded' || message.startsWith('memory exhausted at or near ')) {
+    return new SqlError(message);
+  }
+  return new Error(message);
+}
+
 function ensureLoaded() {
   if (wasmModule) return;
   if (memoryLimitError) throw memoryLimitError;
@@ -454,10 +463,7 @@ export const parsePlPgSQL = awaitInit(async (query: string): Promise<ParseResult
     const resultStr = ptrToString(resultPtr);
     
     // Success is always a JSON object; anything else is an error message
-    if (!resultStr.startsWith('{')) {
-      if (resultStr === 'out of memory') throw outOfMemoryError();
-      throw new Error(resultStr);
-    }
+    if (!resultStr.startsWith('{')) throw plpgsqlError(resultStr);
     
     return JSON.parse(resultStr);
   } finally {
@@ -554,10 +560,7 @@ export function parsePlPgSQLSync(query: string): ParseResult {
     const resultStr = ptrToString(resultPtr);
     
     // Success is always a JSON object; anything else is an error message
-    if (!resultStr.startsWith('{')) {
-      if (resultStr === 'out of memory') throw outOfMemoryError();
-      throw new Error(resultStr);
-    }
+    if (!resultStr.startsWith('{')) throw plpgsqlError(resultStr);
     
     return JSON.parse(resultStr);
   } finally {
