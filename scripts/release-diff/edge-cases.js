@@ -12,7 +12,7 @@ const SQL_DEPTH = {
   'and-chain': (n) => 'SELECT 1 WHERE ' + Array(n).fill('a = 1').join(' AND '),
   'or-chain': (n) => 'SELECT 1 WHERE ' + Array(n).fill('a = 1').join(' OR '),
   'parens': (n) => 'SELECT ' + nest('(', '1', ')', n),
-  'unary-minus': (n) => 'SELECT ' + '-'.repeat(n) + '1',
+  'unary-minus': (n) => 'SELECT ' + '- '.repeat(n) + 'a',
   'not-chain': (n) => 'SELECT ' + 'NOT '.repeat(n) + 'true',
   'function-calls': (n) => 'SELECT ' + nest('f(', '1', ')', n),
   'subselects': (n) => 'SELECT ' + nest('(SELECT ', '1', ')', n),
