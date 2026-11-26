@@ -10,8 +10,8 @@ const list = (item, separator) => (n) => Array.from({ length: n }, (_, i) => ite
 // fails here whatever the last release did. Raise a number when the build
 // gains depth; lower one only for a change the release notes describe.
 const SQL = {
-  'chained +': [(n) => 'SELECT 1' + '+1'.repeat(n), { parse: 4000, fingerprint: 5000, normalize: 500 }],
-  'chained ||': [(n) => "SELECT 'a'" + " || 'a'".repeat(n), { parse: 2500, fingerprint: 5000, normalize: 500 }],
+  'chained +': [(n) => 'SELECT 1' + '+1'.repeat(n), { parse: 4000, fingerprint: 5000, normalize: 1500 }],
+  'chained ||': [(n) => "SELECT 'a'" + " || 'a'".repeat(n), { parse: 2500, fingerprint: 5000, normalize: 1500 }],
   'chained AND': [(n) => 'SELECT 1 WHERE ' + list(() => 'a = 1', ' AND ')(n), { parse: 5000, fingerprint: 5000, normalize: 5000 }],
   'chained OR': [(n) => 'SELECT 1 WHERE ' + list(() => 'a = 1', ' OR ')(n), { parse: 5000, fingerprint: 5000, normalize: 5000 }],
   'chained casts': [(n) => 'SELECT 1' + '::int'.repeat(n), { parse: 2500, fingerprint: 5000, normalize: 1000 }],
@@ -19,8 +19,8 @@ const SQL = {
   'chained unary minus': [(n) => 'SELECT ' + '- '.repeat(n) + 'a', { parse: 2500, fingerprint: 4000, normalize: 1000 }],
   'chained NOT': [(n) => 'SELECT ' + 'NOT '.repeat(n) + 'true', { parse: 2500, fingerprint: 4000, normalize: 500 }],
   'nested parentheses': [(n) => 'SELECT ' + nest('(', '1', ')')(n), { parse: 4000, fingerprint: 4000, normalize: 4000 }],
-  'nested function calls': [(n) => 'SELECT ' + nest('f(', '1', ')')(n), { parse: 2000, fingerprint: 2000, normalize: 500 }],
-  'nested COALESCE': [(n) => 'SELECT ' + nest('COALESCE(', '1', ')')(n), { parse: 2000, fingerprint: 2000, normalize: 500 }],
+  'nested function calls': [(n) => 'SELECT ' + nest('f(', '1', ')')(n), { parse: 2000, fingerprint: 2000, normalize: 750 }],
+  'nested COALESCE': [(n) => 'SELECT ' + nest('COALESCE(', '1', ')')(n), { parse: 2000, fingerprint: 2000, normalize: 750 }],
   'nested ROW': [(n) => 'SELECT ' + nest('ROW(', '1', ')')(n), { parse: 2000, fingerprint: 2000, normalize: 500 }],
   'nested arrays': [(n) => 'SELECT ' + nest('ARRAY[', '1', ']')(n), { parse: 2000, fingerprint: 2000, normalize: 500 }],
   'nested CASE': [(n) => 'SELECT ' + nest('CASE WHEN a THEN ', '1', ' END')(n), { parse: 1000, fingerprint: 1000, normalize: 1000 }],
@@ -42,11 +42,6 @@ const PLPGSQL = {
 const plpgsql = (body) =>
   `CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ DECLARE x int; BEGIN ${body} END $$`;
 
-// Node 20 runs out of stack in fingerprint and normalize at a few dozen
-// levels once V8 has optimized them, on every release including 18.1.5.
-const node20 = Number(process.versions.node.split('.')[0]) < 22 &&
-  'Node 20 overflows its stack in optimized fingerprint and normalize code';
-
 describe('Depth every exported function handles', { timeout: 300000 }, () => {
   before(async () => {
     await lib.loadModule();
@@ -59,13 +54,13 @@ describe('Depth every exported function handles', { timeout: 300000 }, () => {
       assert.equal((await lib.parse(sql)).stmts.length, 1);
     });
 
-    it(`fingerprint and fingerprintSync: ${shape}, ${depth.fingerprint} deep`, { skip: node20 }, async () => {
+    it(`fingerprint and fingerprintSync: ${shape}, ${depth.fingerprint} deep`, async () => {
       const sql = make(depth.fingerprint);
       assert.match(lib.fingerprintSync(sql), /^[0-9a-f]{16}$/);
       assert.match(await lib.fingerprint(sql), /^[0-9a-f]{16}$/);
     });
 
-    it(`normalize and normalizeSync: ${shape}, ${depth.normalize} deep`, { skip: node20 }, async () => {
+    it(`normalize and normalizeSync: ${shape}, ${depth.normalize} deep`, async () => {
       const sql = make(depth.normalize);
       assert.ok(lib.normalizeSync(sql).length > 0);
       assert.ok((await lib.normalize(sql)).length > 0);

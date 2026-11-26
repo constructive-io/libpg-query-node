@@ -75,7 +75,6 @@ jobs:
           - { name: 'v16', path: 'versions/16', version: '16' }
           - { name: 'v17', path: 'versions/17', version: '17' }
           - { name: 'v18', path: 'versions/18', version: '18' }
-        # Node 20 cannot run the fingerprint and normalize depth tests.
         include:
           - { os: ubuntu-latest, node: '22.x', package: { name: 'v18', path: 'versions/18', version: '18' } }
       fail-fast: false
