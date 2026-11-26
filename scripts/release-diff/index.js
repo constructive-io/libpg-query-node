@@ -143,8 +143,8 @@ function testFiles() {
 }
 
 // One file at a time with a wall-clock limit: a WASM call that never returns
-// blocks the event loop, so node:test's own timeouts can't stop it. Tests a
-// killed file never reported count as missing.
+// blocks the event loop, so node:test's own timeouts can't stop it. The file
+// runs in its own process group so a timeout kills node:test's workers too.
 function runTestFile(cwd, file, out) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
@@ -152,22 +152,33 @@ function runTestFile(cwd, file, out) {
       `--test-reporter=${path.join(__dirname, 'reporter.js')}`,
       `--test-reporter-destination=${out}`,
       file,
-    ], { cwd, stdio: 'ignore' });
-    const timer = setTimeout(() => child.kill('SIGKILL'), TEST_FILE_TIMEOUT_MS);
+    ], { cwd, stdio: 'ignore', detached: true });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { process.kill(-child.pid, 'SIGKILL'); } catch (e) {}
+    }, TEST_FILE_TIMEOUT_MS);
     child.on('error', reject);
-    child.on('close', () => {
+    child.on('close', (code) => {
       clearTimeout(timer);
-      resolve(fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '');
+      resolve({
+        status: timedOut ? 'timeout' : code === 0 ? 'pass' : `exit ${code}`,
+        output: fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '',
+      });
     });
   });
 }
 
+// Each file also gets a `<file>` entry with its exit status, so a file that
+// times out or fails outside a test is a difference too.
 async function runTests(cwd, files, label) {
   const results = new Map();
   for (const file of files) {
     const out = path.join(workDir, `tests-${label}-${path.basename(file)}.jsonl`);
     fs.rmSync(out, { force: true });
-    for (const line of (await runTestFile(cwd, file, out)).split('\n')) {
+    const { status, output } = await runTestFile(cwd, file, out);
+    results.set(file, status);
+    for (const line of output.split('\n')) {
       if (!line) continue;
       const { key, status } = JSON.parse(line);
       let unique = key;
@@ -191,7 +202,8 @@ async function diffTests(baselineDir) {
     const now = candidate.get(key) || 'missing';
     if (now !== 'pass') diffs.push({ id: `test:${key}`, baseline: { error: 'pass' }, candidate: { error: now } });
   }
-  return { diffs, compared: baseline.size };
+  const skipped = files.filter((file) => baseline.get(file) === 'timeout');
+  return { diffs, compared: baseline.size, skipped };
 }
 
 function show(outcome) {
@@ -223,10 +235,14 @@ function report(baselineVersion, results, allowlist) {
     lines.push('| Input | Published | Candidate |', '| --- | --- | --- |');
     const cell = (text) => '`' + text.replace(/\|/g, '\\|').replace(/`/g, "'").replace(/\n/g, ' ') + '`';
     for (const diff of failures.slice(0, 200)) {
-      lines.push(`| ${diff.id} | ${cell(show(diff.baseline))} | ${cell(show(diff.candidate))} |`);
+      lines.push(`| ${cell(diff.id)} | ${cell(show(diff.baseline))} | ${cell(show(diff.candidate))} |`);
     }
     if (failures.length > 200) lines.push('', `…and ${failures.length - 200} more in report.json.`);
     lines.push('', `Fix the regression, or add the difference to ${path.relative(ROOT, allowFile)} with the reason it is intended.`);
+  }
+  const skipped = results.flatMap((result) => result.skipped || []);
+  if (skipped.length) {
+    lines.push('', `Test files that timed out on ${publishName}@${baselineVersion}, so their tests were not compared: ${skipped.join(', ')}`);
   }
   const stale = allowlist.filter((entry) => !entry.used);
   if (stale.length) {

@@ -180,8 +180,12 @@ Any output or error that changed fails the job unless
 `versions/18/release-diff.allow.json` names it with a reason.
 
 ```bash
-pnpm run release-diff --major 18 [--baseline 18.1.5] [--fixtures ../pgsql-parser] [--skip-tests]
+pnpm run release-diff --major 18
 ```
+
+Options: `--baseline 18.1.5` compares against another published version,
+`--fixtures ../pgsql-parser` uses a local pgsql-parser checkout instead of
+cloning it, and `--skip-tests` compares only the corpus.
 
 The report is printed and saved to `versions/18/.release-diff/report.json`.
 
