@@ -66,6 +66,11 @@ async function probe(page, { method, query, expectedParameters, fresh = false, w
     assertRecovered(lib.parseSync('SELECT 1'));
     assertRecovered(await lib.parse('SELECT 1'));
     if (error) return error;
+    // 18.1.5 can return a diagnostic string from normalize rather than throw it.
+    if (typeof result === 'string' &&
+        (result.startsWith('memory exhausted at or near ') || result === 'stack depth limit exceeded')) {
+      return { message: result, sqlError: false };
+    }
     const valid = method.startsWith('normalize')
       ? typeof result === 'string' && result.startsWith('SELECT ') &&
         (expectedParameters === undefined || (result.match(/\$/g) || []).length === expectedParameters)
@@ -106,8 +111,8 @@ async function measure(page, version, name, method, sql, floor, ceiling) {
   });
   assert.equal(await tryDepth(floor), null, `${version}: ${name} at depth ${floor}`);
 
-  // WASM tiering can move the host overflow boundary by a few frames. Compare
-  // depths at 100-level resolution rather than treating frame counts as an ABI.
+  // Warm each instance before probing: tiering changes host frame sizes.
+  // Report the resulting estimates on a 100-level grid.
   let low = floor / depthStep;
   let high = ceiling / depthStep;
   const warmup = sql(floor);
@@ -144,6 +149,7 @@ for (const [name, engine] of Object.entries(engines)) {
         const candidate = await measure(pages.candidate, 'candidate', label, method, sql, floor, ceiling);
         rows.push(`| ${label} | ${published.depth} | ${candidate.depth} |`);
         assertLimit(published.error, baseline, label);
+        assertLimit(published.limit, baseline, label);
         let publishedDiagnostic = published.limit;
         if (method === 'normalizeSync' && grammarLimit.test(candidate.limit.message) &&
             !grammarLimit.test(publishedDiagnostic.message)) {
