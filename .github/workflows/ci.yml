@@ -129,6 +129,8 @@ jobs:
             os: macos-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    env:
+      WASM_TEST_BROWSER: ${{ matrix.browser }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -142,12 +144,8 @@ jobs:
         with:
           name: wasm-artifacts-v18
           path: versions/18/wasm/
-      - run: pnpm --dir versions/18 exec playwright install --with-deps "$BROWSER"
-        env:
-          BROWSER: ${{ matrix.browser }}
+      - run: pnpm --dir versions/18 exec playwright install --with-deps "$WASM_TEST_BROWSER"
       - run: pnpm --dir versions/18 test:browser
-        env:
-          BROWSER: ${{ matrix.browser }}
 
   release-diff:
     name: Release diff v18 vs published libpg-query 🔬

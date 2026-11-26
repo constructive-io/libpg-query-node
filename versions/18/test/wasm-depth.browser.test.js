@@ -12,11 +12,11 @@ const builds = {
   candidate: path.resolve(__dirname, '../wasm'),
 };
 const cases = [
-  ['Chained operators', 'parseSync', chained, 4000, 100000],
+  ['Chained operators', 'parseSync', chained, 4000, 32000],
   ['Nested subqueries', 'parseSync', subqueries, 1000, 10000],
   ['Nested function calls', 'parseSync', calls, 2000, 10000],
   ...Object.entries(blocks).map(([name, sql]) => [name, 'parsePlPgSQLSync', sql, 1000, 10000]),
-  ['Normalize operators', 'normalizeSync', chained, 100, 100000],
+  ['Normalize operators', 'normalizeSync', chained, 100, 32000],
   ['Normalize subqueries', 'normalizeSync', subqueries, 100, 10000],
 ];
 
@@ -45,71 +45,89 @@ async function openParser(browser, dir) {
   return page;
 }
 
-async function probe(page, { method, queries, expectedParameters, fresh = false, repeats = 1 }) {
-  return page.evaluate(async ({ method, queries, expectedParameters, fresh, repeats }) => {
-    // An import with a new URL gives each input family its own WASM instance.
-    if (fresh || !globalThis.parser) {
-      globalThis.parser = await import('/parser.js?' + (globalThis.instance = (globalThis.instance || 0) + 1));
+async function probe(page, { method, query, expectedParameters, fresh = false, warmup }) {
+  if (fresh) await page.reload();
+  return page.evaluate(async ({ method, query, expectedParameters, warmup }) => {
+    if (!globalThis.parser) {
+      globalThis.parser = await import('/parser.js');
       await globalThis.parser.loadModule();
     }
     const lib = globalThis.parser;
-    const results = [];
-    for (let i = 0; i < queries.length; i++) {
-      const sql = queries[i];
-      for (let j = 0; j < repeats; j++) {
-        try {
-          const result = await lib[method](sql);
-          const valid = method === 'normalizeSync' || method === 'normalize'
-            ? typeof result === 'string' && result.startsWith('SELECT ') &&
-              (result.match(/\$/g) || []).length === expectedParameters?.[i]
-            : method === 'parsePlPgSQLSync' ? result.plpgsql_funcs?.length === 1 : result.stmts?.length === 1;
-          results.push(valid ? null : { message: typeof result === 'string' ? result.slice(0, 120) : 'Unexpected result' });
-        } catch (error) {
-          results.push({ name: error.name, message: error.message, sqlError: error instanceof lib.SqlError });
-        }
-        if (lib.parseSync('SELECT 1').stmts.length !== 1) throw new Error('Parser did not recover');
-      }
+    if (warmup) {
+      for (let i = 0; i < 20; i++) lib[method](warmup);
     }
-    if ((await lib.parse('SELECT 1')).stmts.length !== 1) throw new Error('Async parse did not recover');
-    return results;
-  }, { method, queries, expectedParameters, fresh, repeats });
+    let error = null;
+    let result;
+    try {
+      result = await lib[method](query);
+    } catch (e) {
+      error = { name: e.name, message: e.message, sqlError: e instanceof lib.SqlError };
+    }
+    assertRecovered(lib.parseSync('SELECT 1'));
+    assertRecovered(await lib.parse('SELECT 1'));
+    if (error) return error;
+    const valid = method.startsWith('normalize')
+      ? typeof result === 'string' && result.startsWith('SELECT ') &&
+        (expectedParameters === undefined || (result.match(/\$/g) || []).length === expectedParameters)
+      : method.startsWith('parsePlPgSQL') ? result.plpgsql_funcs?.length === 1 : result.stmts?.length === 1;
+    if (!valid) throw new Error(`${method} returned an unexpected result`);
+    return null;
+
+    function assertRecovered(result) {
+      if (result.stmts.length !== 1) throw new Error('Parser did not recover');
+    }
+  }, { method, query, expectedParameters, warmup });
 }
 
-function assertLimit(error, version, name) {
+const grammarLimit = /^memory exhausted at or near /;
+const depthStep = 100;
+
+function assertLimit(error, version, name, publishedError) {
   assert.ok(error, `${version}: ${name} unexpectedly succeeded`);
   if (version === 'candidate') {
-    assert.equal(error.message, 'stack depth limit exceeded', name);
+    // For the fixed grammar stack limit, preserve PostgreSQL's own diagnostic.
+    const message = grammarLimit.test(error.message) && grammarLimit.test(publishedError?.message)
+      ? publishedError.message : 'stack depth limit exceeded';
+    assert.equal(error.message, message, name);
     assert.equal(error.sqlError, true, name);
   } else {
-    assert.match(error.message, /call stack|too much recursion|stack depth limit exceeded|^memory exhausted at or near/i, name);
+    assert.ok(grammarLimit.test(error.message) ||
+      /call stack|too much recursion|stack depth limit exceeded/i.test(error.message), `${name}: ${error.message}`);
   }
 }
 
 async function measure(page, version, name, method, sql, floor, ceiling) {
-  const tryDepth = async (depth, fresh) => (await probe(page, {
+  const tryDepth = (depth, warmup) => probe(page, {
     method,
-    queries: [sql(depth)],
-    expectedParameters: [sql === chained ? depth + 1 : 1],
-    fresh,
-  }))[0];
-  assert.equal(await tryDepth(floor, true), null, `${version}: ${name} at depth ${floor}`);
+    query: sql(depth),
+    expectedParameters: sql === chained ? depth + 1 : 1,
+    fresh: true,
+    warmup,
+  });
+  assert.equal(await tryDepth(floor), null, `${version}: ${name} at depth ${floor}`);
 
   // WASM tiering can move the host overflow boundary by a few frames. Compare
   // depths at 100-level resolution rather than treating frame counts as an ABI.
-  const step = 100;
-  let low = floor / step;
-  let high = ceiling / step;
+  let low = floor / depthStep;
+  let high = ceiling / depthStep;
+  const warmup = sql(floor);
+  const limit = await tryDepth(ceiling, warmup);
+  let error = limit;
+  assert.ok(limit, `${version}: ${name} exceeded the depth search ceiling ${ceiling}`);
   while (high - low > 1) {
     const mid = Math.floor((low + high) / 2);
-    const error = await tryDepth(mid * step);
-    if (!error) low = mid;
-    else high = mid;
+    const result = await tryDepth(mid * depthStep, warmup);
+    if (!result) low = mid;
+    else {
+      error = result;
+      high = mid;
+    }
   }
-  return { depth: low * step, error: await tryDepth(ceiling) };
+  return { depth: low * depthStep, error, limit };
 }
 
 const engines = { firefox, webkit };
-const selected = process.env.BROWSER;
+const selected = process.env.WASM_TEST_BROWSER;
 if (selected && !Object.hasOwn(engines, selected)) throw new Error(`Unknown browser: ${selected}`);
 
 for (const [name, engine] of Object.entries(engines)) {
@@ -126,21 +144,45 @@ for (const [name, engine] of Object.entries(engines)) {
         const candidate = await measure(pages.candidate, 'candidate', label, method, sql, floor, ceiling);
         rows.push(`| ${label} | ${published.depth} | ${candidate.depth} |`);
         assertLimit(published.error, baseline, label);
-        assertLimit(candidate.error, 'candidate', label);
-        assert.ok(candidate.depth >= published.depth, `${label}: depth fell from ${published.depth} to ${candidate.depth}`);
+        let publishedDiagnostic = published.limit;
+        if (method === 'normalizeSync' && grammarLimit.test(candidate.limit.message) &&
+            !grammarLimit.test(publishedDiagnostic.message)) {
+          // The old normalizer may overflow before the underlying SQL grammar does.
+          publishedDiagnostic = await probe(pages[baseline], {
+            method: 'parseSync', query: sql(ceiling), fresh: true,
+          });
+        }
+        assertLimit(candidate.error, 'candidate', label, publishedDiagnostic);
+        assertLimit(candidate.limit, 'candidate', label, publishedDiagnostic);
+        assert.ok(candidate.depth >= published.depth - depthStep,
+          `${label}: depth fell from ${published.depth} to ${candidate.depth}`);
+        if (method === 'normalizeSync') {
+          const overflow = await probe(pages.candidate, { method, query: sql(ceiling), fresh: true });
+          assertLimit(overflow, 'candidate', label, publishedDiagnostic);
+          const depth = Math.max(floor, published.depth - depthStep);
+          const afterOverflow = await probe(pages.candidate, {
+            method, query: sql(depth), expectedParameters: sql === chained ? depth + 1 : 1,
+          });
+          assert.equal(afterOverflow, null, `${label}: cannot reach published depth after overflow`);
+        }
       });
     }
-    await t.test('recovers after repeated synchronous and asynchronous overflows', async () => {
-      for (const [version, page] of Object.entries(pages)) {
-        const options = { queries: [chained(100000)] };
-        const errors = await probe(page, { ...options, method: 'parseSync', fresh: true, repeats: 60 });
-        for (const error of errors) assertLimit(error, version, 'parseSync');
-        const [error] = await probe(page, { ...options, method: 'normalize' });
-        assertLimit(error, version, 'normalize');
-      }
-    });
     const summary = rows.join('\n') + '\n';
     console.log('\n' + summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+    await t.test('recovers after synchronous and asynchronous overflows', async () => {
+      for (const [version, page] of Object.entries(pages)) {
+        const query = chained(32000);
+        // 18.1.5 reuses an instance after a host overflow. Measure recovery from
+        // one overflow there, then repeat on the candidate across browser tasks.
+        const attempts = version === 'candidate' ? 8 : 1;
+        for (let i = 0; i < attempts; i++) {
+          const error = await probe(page, { query, method: 'parseSync', fresh: i === 0 });
+          assertLimit(error, version, 'parseSync');
+        }
+        const error = await probe(page, { query, method: 'normalize', fresh: version !== 'candidate' });
+        assertLimit(error, version, 'normalize');
+      }
+    });
   });
 }

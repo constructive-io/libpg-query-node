@@ -1,10 +1,18 @@
 const query = require("../");
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { blocks } = require('./wasm-depth-cases');
 
 describe("PL/pgSQL Parsing", () => {
   before(async () => {
     await query.parse("SELECT 1");
+  });
+
+  it("preserves PostgreSQL's grammar limit as a SqlError", async () => {
+    const sql = blocks.loops(10000);
+    const expected = { name: "SqlError", message: 'memory exhausted at or near "LOOP"' };
+    assert.throws(() => query.parsePlPgSQLSync(sql), expected);
+    await assert.rejects(query.parsePlPgSQL(sql), expected);
   });
 
   describe("Sync PL/pgSQL Parsing", () => {
