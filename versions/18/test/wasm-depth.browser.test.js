@@ -17,7 +17,8 @@ const cases = [
   ['Nested function calls', 'parseSync', calls, 2000, 10000],
   ...Object.entries(blocks).map(([name, sql]) => [name, 'parsePlPgSQLSync', sql, 1000, 10000]),
   ['Normalize operators', 'normalizeSync', chained, 100, 32000],
-  ['Normalize subqueries', 'normalizeSync', subqueries, 100, 10000],
+  // PostgreSQL's grammar caps nested subqueries at just over 3300.
+  ['Normalize subqueries', 'normalizeSync', subqueries, 100, 3400],
 ];
 
 async function bundleParser(dir) {
