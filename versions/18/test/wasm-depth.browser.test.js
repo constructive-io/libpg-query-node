@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { appendFileSync } = require('node:fs');
+const { setTimeout: delay } = require('node:timers/promises');
 const { build } = require('esbuild-wasm');
 const { firefox, webkit } = require('playwright');
 const { chained, subqueries, calls, blocks } = require('./wasm-depth-cases');
@@ -33,7 +34,7 @@ async function bundleParser(dir) {
   return outputFiles[0].text;
 }
 
-async function openParser(browser, dir, script) {
+async function openParser(browser, version, dir, script) {
   const page = await browser.newPage();
   const origin = 'http://libpg-query.test';
   await page.route(origin + '/**', (route) => {
@@ -46,23 +47,38 @@ async function openParser(browser, dir, script) {
       default: return route.abort();
     }
   });
-  await page.goto(origin);
+  await page.goto(origin + '/?build=' + version);
   return page;
 }
 
-async function probe(page, { method, query, expectedParameters, fresh = false, warmup }) {
+async function probe(page, { method, query, expectedParameters, fresh = false, warmup, depth }) {
   if (fresh) await page.reload();
-  return page.evaluate(async ({ method, query, expectedParameters, warmup }) => {
+  const label = `${page.url()} ${method} depth=${depth ?? 'recovery'}`;
+  const slow = setTimeout(() => console.log(`Slow browser probe: ${label}`), 15000);
+  try {
+    if (fresh || warmup) {
+      await page.evaluate(async ({ method, warmup }) => {
+        globalThis.parser ??= await import('/parser.js');
+        await globalThis.parser.loadModule();
+        if (warmup) for (let i = 0; i < 20; i++) globalThis.parser[method](warmup);
+      }, { method, warmup });
+      // Give the engine time to finish background compilation without relying
+      // on timers in a potentially backgrounded browser tab.
+      if (warmup) await delay(20);
+    }
+    return await evaluateQuery(page, { method, query, expectedParameters });
+  } finally {
+    clearTimeout(slow);
+  }
+}
+
+async function evaluateQuery(page, { method, query, expectedParameters }) {
+  return page.evaluate(async ({ method, query, expectedParameters }) => {
     if (!globalThis.parser) {
       globalThis.parser = await import('/parser.js');
       await globalThis.parser.loadModule();
     }
     const lib = globalThis.parser;
-    if (warmup) {
-      for (let i = 0; i < 20; i++) lib[method](warmup);
-      // WebKit can finish compiling a new tier while the probe is running.
-      await new Promise(resolve => setTimeout(resolve, 20));
-    }
     let error = null;
     let result;
     try {
@@ -88,7 +104,7 @@ async function probe(page, { method, query, expectedParameters, fresh = false, w
     function assertRecovered(result) {
       if (result.stmts.length !== 1) throw new Error('Parser did not recover');
     }
-  }, { method, query, expectedParameters, warmup });
+  }, { method, query, expectedParameters });
 }
 
 const grammarLimit = /^memory exhausted at or near /;
@@ -110,6 +126,7 @@ function assertLimit(error, version, name, publishedError) {
 
 async function measure(page, version, name, method, sql, floor, ceiling) {
   const tryDepth = (depth, warmup) => probe(page, {
+    depth,
     method,
     query: sql(depth),
     expectedParameters: sql === chained ? depth + 1 : 1,
@@ -151,7 +168,7 @@ for (const [name, engine] of Object.entries(engines)) {
       [version, dir, await bundleParser(dir)]));
     const openPages = async (subtest) => Object.fromEntries(await Promise.all(
       bundles.map(async ([version, dir, script]) => {
-        const page = await openParser(browser, dir, script);
+        const page = await openParser(browser, version, dir, script);
         subtest.after(() => page.context().close());
         return [version, page];
       })
