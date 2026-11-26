@@ -31,6 +31,20 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
+  // 18.2.x left the WASM build at the 100kB default limit, so it rejected nesting
+  // that 18.1.x and native builds parse.
+  it('parses nesting within the stack depth limit', async () => {
+    await loadModule();
+    const nested = {
+      'chained operators': 'SELECT 1' + '+1'.repeat(2000),
+      'nested subqueries': 'SELECT ' + '(SELECT '.repeat(1000) + '1' + ')'.repeat(1000),
+      'nested function calls': 'SELECT ' + 'f('.repeat(2000) + '1' + ')'.repeat(2000),
+    };
+    for (const [name, sql] of Object.entries(nested)) {
+      assert.equal(parseSync(sql).stmts.length, 1, name);
+    }
+  });
+
   it('frees replaced WASM heaps even when callers keep the errors', () => {
     const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
       (async () => {
