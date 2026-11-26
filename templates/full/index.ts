@@ -220,6 +220,8 @@ function callWasm(fn: () => number): number {
       invalidateModule(error);
       if (isStackOverflow(error)) {
         const message = 'stack depth limit exceeded';
+        // Until its stack is formatted, the error's WASM frames keep the dropped instance alive.
+        void error.stack;
         throw Object.assign(new SqlError(message, { message, cursorPosition: 0 }), { cause: error });
       }
       throw error;
