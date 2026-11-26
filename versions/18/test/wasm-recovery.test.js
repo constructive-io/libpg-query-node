@@ -89,7 +89,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
       ['parseSync', DEEP],
       ['parseSync', subqueries(3000)],
       ['normalizeSync', DEEP],
-      ['normalizeSync', subqueries(1000)],
+      ['normalizeSync', subqueries(3000)],
     ];
     for (const [name, sql] of tooDeep) {
       assert.throws(() => lib[name](sql), (error) => {
