@@ -3,6 +3,9 @@
   "private": true,
   "description": "PostgreSQL query parser monorepo",
   "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "policy": "pnpm-policy generate --builds-key onlyBuiltDependencies",
     "policy:check": "pnpm-policy check --builds-key onlyBuiltDependencies",

@@ -6,6 +6,9 @@
   "main": "./wasm/index.cjs",
   "module": "./wasm/index.js",
   "typings": "./wasm/index.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -15,7 +18,7 @@
     "distTag": "pg18",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
     "libpgQueryTag": "18-constructive",
-    "libpgQueryCommit": "91d254f764b270a02f8445d3b49030eb4fda0302",
+    "libpgQueryCommit": "4fcb78670865e86f01ddd8c045572c287882022a",
     "fullApi": true
   },
   "files": [

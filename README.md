@@ -119,7 +119,7 @@ This package uses a **WASM-only build system** for true cross-platform compatibi
 
 ### Prerequisites
 
-- Node.js (version 16 or higher recommended)
+- Node.js (version 22 or higher)
 - [pnpm](https://pnpm.io/) (v8+ recommended)
 
 ### Building WASM Artifacts
