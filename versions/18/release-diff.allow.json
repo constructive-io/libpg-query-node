@@ -60,6 +60,16 @@
       "reason": "Array element types in PL/pgSQL no longer need the system catalog"
     },
     {
+      "id": [
+        "edge:*:fingerprint",
+        "edge:*:normalize"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "memory exhausted at or near *",
+      "reason": "18.1.5 returned the parser's 'memory exhausted' message as the fingerprint or normalized query; the candidate throws it"
+    },
+    {
       "id": "edge:*",
       "baseline": "18.1.5",
       "published": "RangeError: Maximum call stack size exceeded",

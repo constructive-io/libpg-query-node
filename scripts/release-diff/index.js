@@ -16,6 +16,10 @@ const ROOT = path.resolve(__dirname, '../..');
 const SQL_FNS = ['parse', 'fingerprint', 'normalize', 'scan'];
 const INPUT_TIMEOUT_MS = 120000;
 const TEST_FILE_TIMEOUT_MS = 300000;
+// A bigger JS stack than Node's default (~1 MB, still inside the 8 MB thread
+// stack), so deep JSON from either build reaches the comparison instead of a
+// RangeError whose depth depends on the machine.
+const JS_STACK_KB = 4000;
 
 function parseArgs(argv) {
   const args = {};
@@ -76,7 +80,7 @@ function loadInputs(fixtures) {
 
 function runCollector(baselineDir, baselineVersion, inputsFile, start) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(__dirname, 'collect.js'), baselineDir, versionDir, inputsFile, String(start), allowFile, baselineVersion], {
+    const child = spawn(process.execPath, [`--stack-size=${JS_STACK_KB}`, path.join(__dirname, 'collect.js'), baselineDir, versionDir, inputsFile, String(start), allowFile, baselineVersion], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const lines = [];
