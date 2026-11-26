@@ -114,6 +114,9 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
         if (errors.length !== 2 || errors.some((error) => !error.message.includes('out of WASM memory'))) {
           throw new Error('Expected two WASM memory failures');
         }
+        if (kept.length !== 30 || kept.some((error) => !(error instanceof lib.SqlError) || error.message !== 'stack depth limit exceeded')) {
+          throw new Error('Expected 30 stack depth errors, got ' + kept.map(String).join(', ').slice(0, 200));
+        }
         process.stdout.write('\\ngrown=' + (process.memoryUsage().external - base));
       })();`;
     // A non-zero exit code (libpg_query's exit() leaking out) makes execFileSync throw.
