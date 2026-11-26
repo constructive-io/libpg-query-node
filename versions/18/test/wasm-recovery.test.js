@@ -55,6 +55,39 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     }
   });
 
+  // Each nesting level of normalize used to cross from WASM into JS and back,
+  // which V8 only makes cheap once an instance is warm: a fresh instance, like
+  // the one that replaces an overflowed one, stopped at about 770 terms.
+  it('normalizes deep nesting on an instance that just replaced an overflowed one', async () => {
+    await loadModule();
+    const chained = 'SELECT 1' + '+1'.repeat(2000);
+    const normalized = 'SELECT $1' + Array.from({ length: 2000 }, (_, i) => `+$${i + 2}`).join('');
+    for (let i = 0; i < 3; i++) {
+      assert.throws(() => lib.normalizeSync(DEEP), /stack depth limit exceeded/);
+      assert.equal(lib.normalizeSync(chained), normalized);
+    }
+  });
+
+  // --no-liftoff runs the module on V8's optimizing compiler from the start,
+  // which is where a long-running process ends up. On Node 20 its frame for
+  // the fingerprint walk was so large that 30 chained terms overflowed.
+  it('fingerprints and normalizes nesting on V8\'s optimizing compiler', () => {
+    const script = `
+      const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
+      const nest = (open, n) => 'SELECT ' + open.repeat(n) + '1' + ')'.repeat(n);
+      lib.loadModule().then(() => {
+        const chained = 'SELECT 1' + '+1'.repeat(1000);
+        lib.fingerprintSync(chained);
+        lib.fingerprintSync(nest('f(', 500));
+        lib.fingerprintSync(nest('(SELECT ', 500));
+        lib.normalizeSync(chained);
+        lib.normalizeSync(nest('f(', 500));
+        lib.normalizeSync(nest('(SELECT ', 250));
+      });
+    `;
+    execFileSync(process.execPath, ['--no-liftoff', '-e', script], { stdio: 'pipe' });
+  });
+
   // V8's native stack can run out inside a WASM call before libpg_query's own
   // check, e.g. in normalize, whose frames are larger there.
   it('reports a stack depth error, not a RangeError, for nesting too deep to parse', async () => {
@@ -64,7 +97,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
       ['parseSync', DEEP],
       ['parseSync', subqueries(3000)],
       ['normalizeSync', DEEP],
-      ['normalizeSync', subqueries(1000)],
+      ['normalizeSync', subqueries(3000)],
     ];
     for (const [name, sql] of tooDeep) {
       assert.throws(() => lib[name](sql), (error) => {
