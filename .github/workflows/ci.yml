@@ -165,6 +165,7 @@ jobs:
         with:
           name: release-diff-v18
           path: versions/18/.release-diff/report-*.json
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 
