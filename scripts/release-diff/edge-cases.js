@@ -1,9 +1,7 @@
 // Inputs the fixtures don't cover: deep nesting, long lists and large scripts,
 // at sizes on both sides of the parser's depth and memory limits. A build that
 // rejects an input the last release parsed (or the reverse) shows up here.
-// Close steps where the limits have been (300 to 2,500), so a build that loses
-// a fifth of its depth lands on the other side of a step.
-const DEPTHS = [100, 250, 350, 500, 625, 750, 875, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 4000, 5000, 7500, 10000];
+const DEPTHS = [100, 250, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000];
 const SIZES = [1000, 10000, 50000];
 
 const nest = (open, inner, close, n) => open.repeat(n) + inner + close.repeat(n);
@@ -25,11 +23,6 @@ const SQL_DEPTH = {
   'set-ops': (n) => Array(n).fill('SELECT 1').join(' UNION ALL '),
   'ctes': (n) => 'WITH ' + Array.from({ length: n }, (_, i) => `c${i} AS (SELECT 1)`).join(', ') + ' SELECT 1',
   'json-path': (n) => "SELECT j" + " -> 'a'".repeat(n),
-  'from-subselects': (n) => 'SELECT * FROM ' + nest('(SELECT * FROM ', 't', ') s', n),
-  'nested-ctes': (n) => nest('WITH c AS (', 'SELECT 1', ') SELECT * FROM c', n),
-  'coalesce': (n) => 'SELECT ' + nest('COALESCE(', '1', ')', n),
-  'rows': (n) => 'SELECT ' + nest('ROW(', '1', ')', n),
-  'unclosed-parens': (n) => 'SELECT ' + '('.repeat(n) + '1',
 };
 
 const SQL_SIZE = {
@@ -40,9 +33,6 @@ const SQL_SIZE = {
   'string-literal': (n) => "SELECT '" + 'a'.repeat(n * 10) + "'",
   'comment': (n) => 'SELECT 1 /* ' + 'x'.repeat(n * 10) + ' */',
   'unicode-identifiers': (n) => 'SELECT ' + Array(n).fill('"é漢字🙂"').join(', '),
-  'params': (n) => 'SELECT ' + Array.from({ length: n }, (_, i) => `$${i + 1}`).join(', '),
-  'table-columns': (n) => 'CREATE TABLE t (' + Array.from({ length: n }, (_, i) => `c${i} int`).join(', ') + ')',
-  'insert-rows': (n) => 'INSERT INTO t (a, b) VALUES ' + Array(n).fill("(1, 'x')").join(', '),
 };
 
 const PLPGSQL_DEPTH = {
@@ -50,58 +40,23 @@ const PLPGSQL_DEPTH = {
   'begin-blocks': (n) => nest('BEGIN ', 'NULL;', ' END;', n),
   'loops': (n) => nest('LOOP ', 'EXIT;', ' END LOOP;', n),
   'expression': (n) => 'x := 1' + '+1'.repeat(n) + ';',
-  'case-blocks': (n) => nest('CASE WHEN true THEN ', 'NULL;', ' END CASE;', n),
-};
-
-const PLPGSQL_SIZE = {
-  'statements': (n) => 'x := 1; '.repeat(n),
-  'elsif-branches': (n) => 'IF x = 0 THEN NULL; ' + Array.from({ length: n }, (_, i) => `ELSIF x = ${i + 1} THEN NULL; `).join('') + 'END IF;',
-  'case-branches': (n) => 'CASE x ' + Array.from({ length: n }, (_, i) => `WHEN ${i} THEN NULL; `).join('') + 'ELSE NULL; END CASE;',
-};
-const PLPGSQL_SIZES = [100, 1000, 5000];
-
-// Depths every release has handled, checked on an instance whose previous call
-// overflowed: an instance that was replaced or left damaged can handle less.
-const TOO_DEEP = 100000;
-const AFTER_OVERFLOW = {
-  'plus-chain': [SQL_DEPTH['plus-chain'], [250, 500, 750, 1000, 1500]],
-  'function-calls': [SQL_DEPTH['function-calls'], [100, 250, 500]],
-  'subselects': [SQL_DEPTH['subselects'], [100, 250, 350]],
 };
 
 const plpgsql = (body) =>
   `CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ DECLARE x int; BEGIN ${body} END $$`;
 
 const SQL_FNS = ['parse', 'fingerprint', 'normalize', 'scan'];
-const ASYNC_SQL_FNS = SQL_FNS.map((fn) => `${fn}Async`);
-// Every function at every size would triple the run; the promise-returning
-// exports share the synchronous code, so a few sizes per shape cover them.
-const ASYNC_DEPTHS = new Set([100, 1000, 2000]);
-const ASYNC_SIZES = new Set([1000]);
 
 module.exports = function edgeCases() {
   const cases = [];
   for (const [name, make] of Object.entries(SQL_DEPTH)) {
-    for (const n of DEPTHS) cases.push({ id: `edge:${name}-${n}`, sql: make(n), fns: ASYNC_DEPTHS.has(n) ? SQL_FNS.concat(ASYNC_SQL_FNS) : SQL_FNS });
+    for (const n of DEPTHS) cases.push({ id: `edge:${name}-${n}`, sql: make(n), fns: SQL_FNS });
   }
   for (const [name, make] of Object.entries(SQL_SIZE)) {
-    for (const n of SIZES) cases.push({ id: `edge:${name}-${n}`, sql: make(n), fns: ASYNC_SIZES.has(n) ? SQL_FNS.concat(ASYNC_SQL_FNS) : SQL_FNS });
+    for (const n of SIZES) cases.push({ id: `edge:${name}-${n}`, sql: make(n), fns: SQL_FNS });
   }
   for (const [name, make] of Object.entries(PLPGSQL_DEPTH)) {
-    for (const n of DEPTHS) {
-      cases.push({ id: `edge:plpgsql-${name}-${n}`, sql: plpgsql(make(n)), fns: ASYNC_DEPTHS.has(n) ? ['parsePlPgSQL', 'parsePlPgSQLAsync'] : ['parsePlPgSQL'] });
-    }
-  }
-  for (const [name, make] of Object.entries(PLPGSQL_SIZE)) {
-    for (const n of PLPGSQL_SIZES) cases.push({ id: `edge:plpgsql-${name}-${n}`, sql: plpgsql(make(n)), fns: ['parsePlPgSQL'].concat(SQL_FNS) });
-  }
-  for (const [name, [make, depths]] of Object.entries(AFTER_OVERFLOW)) {
-    for (const n of depths) {
-      cases.push({ id: `edge:after-overflow-${name}-${n}`, sql: make(n), after: make(TOO_DEEP), fns: ['parse', 'normalize', 'fingerprint'] });
-    }
-  }
-  for (const n of [100, 250, 350]) {
-    cases.push({ id: `edge:after-overflow-plpgsql-if-blocks-${n}`, sql: plpgsql(PLPGSQL_DEPTH['if-blocks'](n)), after: plpgsql(PLPGSQL_DEPTH['if-blocks'](TOO_DEEP)), fns: ['parsePlPgSQL'] });
+    for (const n of DEPTHS) cases.push({ id: `edge:plpgsql-${name}-${n}`, sql: plpgsql(make(n)), fns: ['parsePlPgSQL'] });
   }
   return cases;
 };

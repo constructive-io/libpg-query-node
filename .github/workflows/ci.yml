@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   test:
-    name: Test ${{ matrix.package.name }} on ${{ matrix.os }} ${{ matrix.os == 'ubuntu-latest' && '🐧' || matrix.os == 'macos-latest' && '🍎' || '🪟' }}
+    name: Test ${{ matrix.package.name }} on ${{ matrix.os }}${{ matrix.node && ' Node 22' || '' }} ${{ matrix.os == 'ubuntu-latest' && '🐧' || matrix.os == 'macos-latest' && '🍎' || '🪟' }}
     needs: build-wasm
     strategy:
       matrix:
@@ -74,6 +74,9 @@ jobs:
           - { name: 'v16', path: 'versions/16', version: '16' }
           - { name: 'v17', path: 'versions/17', version: '17' }
           - { name: 'v18', path: 'versions/18', version: '18' }
+        # Node 20 cannot run the fingerprint and normalize depth tests.
+        include:
+          - { os: ubuntu-latest, node: '22.x', package: { name: 'v18', path: 'versions/18', version: '18' } }
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -83,7 +86,7 @@ jobs:
       - name: Setup Node.js 🌐
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: ${{ matrix.node || '20.x' }}
 
       - name: Setup pnpm 📦
         uses: pnpm/action-setup@v2
@@ -164,8 +167,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-diff-v18
-          path: versions/18/.release-diff/report-*.json
-          include-hidden-files: true
+          path: versions/18/.release-diff/report.json
           if-no-files-found: ignore
           retention-days: 7
 

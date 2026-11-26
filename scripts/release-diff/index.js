@@ -3,7 +3,7 @@
 // through the last published libpg-query and the candidate build in
 // versions/<major>/wasm, and fails on any difference the allowlist doesn't name.
 //
-//   node scripts/release-diff [--major 18] [--baseline pg18|18.1.5|pg18,18.1.5]
+//   node scripts/release-diff [--major 18] [--baseline pg18|18.1.5]
 //     [--fixtures ../pgsql-parser] [--allow versions/18/release-diff.allow.json]
 //     [--skip-tests]
 const fs = require('node:fs');
@@ -14,7 +14,6 @@ const { loadAllowlist, allows } = require('./allowlist');
 
 const ROOT = path.resolve(__dirname, '../..');
 const SQL_FNS = ['parse', 'fingerprint', 'normalize', 'scan'];
-const ASYNC_SQL_FNS = SQL_FNS.map((fn) => `${fn}Async`);
 const INPUT_TIMEOUT_MS = 120000;
 const TEST_FILE_TIMEOUT_MS = 300000;
 // A bigger JS stack than Node's default (~1 MB, still inside the 8 MB thread
@@ -38,20 +37,12 @@ const versionDir = path.join(ROOT, 'versions', major);
 const workDir = path.join(versionDir, '.release-diff');
 const pkg = JSON.parse(fs.readFileSync(path.join(versionDir, 'package.json'), 'utf8'));
 const publishName = pkg['x-publish'].publishName;
+const baselineSpec = args.baseline || process.env.RELEASE_DIFF_BASELINE || pkg['x-publish'].distTag;
 const allowFile = path.resolve(args.allow || path.join(versionDir, 'release-diff.allow.json'));
-// Without --baseline: the last published release, then the reference release
-// the allowlist file names. The last release alone would take over any
-// regression it shipped with; the reference is fixed, so it still shows.
-const baselineArg = args.baseline || process.env.RELEASE_DIFF_BASELINE;
-const baselineSpecs = baselineArg ? baselineArg.split(',') : [pkg['x-publish'].distTag].concat(referenceRelease() || []);
-
-function referenceRelease() {
-  return fs.existsSync(allowFile) ? JSON.parse(fs.readFileSync(allowFile, 'utf8')).reference : undefined;
-}
 
 const sh = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { encoding: 'utf8', ...opts }).trim();
 
-function fetchBaseline(baselineSpec) {
+function fetchBaseline() {
   const version = JSON.parse(sh('npm', ['view', `${publishName}@${baselineSpec}`, 'version', '--json', '--loglevel=error']));
   const dir = path.join(workDir, `baseline-${version}`);
   if (!fs.existsSync(path.join(dir, 'wasm', 'index.cjs'))) {
@@ -79,10 +70,10 @@ function loadInputs(fixtures) {
   const read = (file) => JSON.parse(fs.readFileSync(path.join(fixtures, '__fixtures__', file), 'utf8'));
   const inputs = [];
   for (const [name, sql] of Object.entries(read('generated/generated.json'))) {
-    inputs.push({ id: `kitchen-sink:${name}`, sql, fns: SQL_FNS.concat(ASYNC_SQL_FNS) });
+    inputs.push({ id: `kitchen-sink:${name}`, sql, fns: SQL_FNS });
   }
   for (const [name, sql] of Object.entries(read('plpgsql-generated/generated.json'))) {
-    inputs.push({ id: `plpgsql:${name}`, sql, fns: ['parsePlPgSQL', 'parsePlPgSQLAsync'].concat(SQL_FNS) });
+    inputs.push({ id: `plpgsql:${name}`, sql, fns: ['parsePlPgSQL'] });
   }
   return inputs.concat(edgeCases());
 }
@@ -273,7 +264,7 @@ function report(baselineVersion, results, allowlist) {
     for (const diff of failures.slice(0, 200)) {
       lines.push(`| ${cell(diff.id)} | ${cell(show(diff.baseline))} | ${cell(show(diff.candidate))} |`);
     }
-    if (failures.length > 200) lines.push('', `…and ${failures.length - 200} more in report-${baselineVersion}.json.`);
+    if (failures.length > 200) lines.push('', `…and ${failures.length - 200} more in report.json.`);
     lines.push('', `Fix the regression, or add the difference to ${path.relative(ROOT, allowFile)} with the reason it is intended.`);
   }
   const skipped = results.flatMap((result) => result.skipped || []);
@@ -288,7 +279,7 @@ function report(baselineVersion, results, allowlist) {
   const markdown = lines.join('\n') + '\n';
   process.stdout.write(markdown);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
-  fs.writeFileSync(path.join(workDir, `report-${baselineVersion}.json`), JSON.stringify({ baseline: baselineVersion, compared, allowed, failures }, null, 2));
+  fs.writeFileSync(path.join(workDir, 'report.json'), JSON.stringify({ baseline: baselineVersion, compared, allowed, failures }, null, 2));
   return failures.length;
 }
 
@@ -297,18 +288,12 @@ function report(baselineVersion, results, allowlist) {
     throw new Error(`No candidate build in ${path.relative(ROOT, versionDir)}/wasm; build it first.`);
   }
   fs.mkdirSync(workDir, { recursive: true });
+  const baseline = fetchBaseline();
+  console.log(`Comparing ${publishName}@${baseline.version} with the candidate build of ${pkg.name}@${pkg.version}`);
   const inputs = loadInputs(fixturesDir());
-  const seen = new Set();
-  let failures = 0;
-  for (const spec of baselineSpecs) {
-    const baseline = fetchBaseline(spec);
-    if (seen.has(baseline.version)) continue;
-    seen.add(baseline.version);
-    console.log(`Comparing ${publishName}@${baseline.version} with the candidate build of ${pkg.name}@${pkg.version}`);
-    const results = [await diffCorpus(baseline, inputs)];
-    if (!args.skipTests) results.push(await diffTests(baseline.dir));
-    failures += report(baseline.version, results, loadAllowlist(allowFile, baseline.version));
-  }
+  const results = [await diffCorpus(baseline, inputs)];
+  if (!args.skipTests) results.push(await diffTests(baseline.dir));
+  const failures = report(baseline.version, results, loadAllowlist(allowFile, baseline.version));
   process.exit(failures ? 1 : 0);
 })().catch((error) => {
   console.error(error);

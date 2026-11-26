@@ -174,31 +174,20 @@ pnpm run test
 ### Release diff
 
 CI runs every pgsql-parser kitchen-sink and PL/pgSQL fixture, a set of deep and
-large generated inputs, and the PG 18 test suite through a published
-`libpg-query` and the candidate build in `versions/18/wasm/`. Every exported
-function is compared, synchronous and promise-returning. Any output or error
-that changed fails the job unless `versions/18/release-diff.allow.json` names
-it with a reason.
-
-The candidate is compared with two releases:
-
-- the last published one (`pg18` dist-tag), which shows what this release changes;
-- the `reference` release named in `release-diff.allow.json` (18.1.5), which
-  stays fixed. A regression that was published becomes part of the `pg18`
-  baseline, so only the reference still shows it. Its allowlist entries carry
-  `"baseline": "18.1.5"` and are the full list of what PG 18 releases have
-  changed since.
+large generated inputs, and the PG 18 test suite through the last published
+`libpg-query` (`pg18` dist-tag) and the candidate build in `versions/18/wasm/`.
+Any output or error that changed fails the job unless
+`versions/18/release-diff.allow.json` names it with a reason.
 
 ```bash
 pnpm run release-diff --major 18
 ```
 
-Run it before every publish, not only in CI. Options: `--baseline 18.1.5`
-compares against one published version, `--fixtures ../pgsql-parser` uses a
-local pgsql-parser checkout instead of cloning it, and `--skip-tests` compares
-only the corpus.
+Options: `--baseline 18.1.5` compares against another published version,
+`--fixtures ../pgsql-parser` uses a local pgsql-parser checkout instead of
+cloning it, and `--skip-tests` compares only the corpus.
 
-Each report is printed and saved to `versions/18/.release-diff/report-<version>.json`.
+The report is printed and saved to `versions/18/.release-diff/report.json`.
 
 ### Slow recovery checks (local only)
 

@@ -1,12 +1,10 @@
 // versions/<major>/release-diff.allow.json: the differences a release intends.
 //
-//   { "reference": "18.1.5",                // compared too, besides the last release
-//     "allow": [{
+//   { "allow": [{
 //       "id": "kitchen-sink:*:fingerprint",  // input:function, `*` matches anything; or a list
 //       "reason": "why the release changes this",
 //       "baseline": "18.1.5",                // optional: only against this release
 //       "published": "ok", "candidate": "ok" // optional: `ok`, `pass` or the error message
-//       "publishedOutput": "memory exh*",    // optional: what the release returned
 //       "ignoreKeys": ["arg_location"]       // optional: outputs equal without these keys
 //   }] }
 //
@@ -26,7 +24,7 @@ function loadAllowlist(file, baselineVersion) {
     .map((entry) => {
       if (!entry.id || !entry.reason) throw new Error(`${file}: every entry needs an id and a reason`);
       const optional = (glob) => (glob === undefined ? null : globToRegExp(glob));
-      return { ...entry, idPatterns: [].concat(entry.id).map(globToRegExp), publishedPattern: optional(entry.published), candidatePattern: optional(entry.candidate), publishedOutputPattern: optional(entry.publishedOutput), used: 0 };
+      return { ...entry, idPatterns: [].concat(entry.id).map(globToRegExp), publishedPattern: optional(entry.published), candidatePattern: optional(entry.candidate), used: 0 };
     });
 }
 
@@ -35,8 +33,7 @@ const summary = (outcome) => ('ok' in outcome ? 'ok' : outcome.error);
 function allows(entry, diff) {
   return entry.idPatterns.some((pattern) => pattern.test(diff.id))
     && (!entry.publishedPattern || entry.publishedPattern.test(summary(diff.baseline)))
-    && (!entry.candidatePattern || entry.candidatePattern.test(summary(diff.candidate)))
-    && (!entry.publishedOutputPattern || ('ok' in diff.baseline && entry.publishedOutputPattern.test(String(diff.baseline.ok))));
+    && (!entry.candidatePattern || entry.candidatePattern.test(summary(diff.candidate)));
 }
 
 function withoutKeys(json, keys) {

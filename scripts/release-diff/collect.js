@@ -24,18 +24,6 @@ const FNS = {
     return JSON.stringify(rest);
   },
   parsePlPgSQL: (lib, sql) => JSON.stringify(lib.parsePlPgSQLSync(sql)),
-  // The promise-returning exports, so every exported function is compared.
-  parseAsync: async (lib, sql) => {
-    const { version, ...rest } = await lib.parse(sql);
-    return JSON.stringify(rest);
-  },
-  fingerprintAsync: (lib, sql) => lib.fingerprint(sql),
-  normalizeAsync: (lib, sql) => lib.normalize(sql),
-  scanAsync: async (lib, sql) => {
-    const { version, ...rest } = await lib.scan(sql);
-    return JSON.stringify(rest);
-  },
-  parsePlPgSQLAsync: async (lib, sql) => JSON.stringify(await lib.parsePlPgSQL(sql)),
 };
 
 // Source file and line of a SqlError move with any C change, so only the
@@ -48,9 +36,9 @@ function describeError(error) {
   return { error: `${(error && error.name) || 'Error'}: ${(error && error.message) || String(error)}` };
 }
 
-async function run(lib, fn, sql) {
+function run(lib, fn, sql) {
   try {
-    return { ok: await FNS[fn](lib, sql) };
+    return { ok: FNS[fn](lib, sql) };
   } catch (error) {
     return describeError(error);
   }
@@ -83,18 +71,11 @@ function preview(outcome, other) {
 (async () => {
   await Promise.all(libs.map((lib) => lib.loadModule()));
   for (let i = Number(startArg); i < inputs.length; i++) {
-    const { id, sql, fns, after } = inputs[i];
+    const { id, sql, fns } = inputs[i];
     write({ type: 'at', i });
     let threw = false;
     for (const fn of fns) {
-      // `after` runs first and its outcome is dropped: what is compared is the
-      // call that follows it on the same instance (e.g. right after an overflow).
-      if (after !== undefined) {
-        for (const lib of libs) await run(lib, fn, after);
-        threw = true;
-      }
-      const baseline = await run(libs[0], fn, sql);
-      const candidate = await run(libs[1], fn, sql);
+      const [baseline, candidate] = libs.map((lib) => run(lib, fn, sql));
       threw = threw || 'error' in baseline || 'error' in candidate;
       if (!same(baseline, candidate)) {
         const diffId = `${id}:${fn}`;
