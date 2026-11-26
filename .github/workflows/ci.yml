@@ -62,10 +62,11 @@ jobs:
           retention-days: 1
 
   test:
-    name: Test ${{ matrix.package.name }} on ${{ matrix.os }}${{ matrix.node && ' Node 22' || '' }} ${{ matrix.os == 'ubuntu-latest' && '🐧' || matrix.os == 'macos-latest' && '🍎' || '🪟' }}
+    name: Test ${{ matrix.package.name }} on ${{ matrix.os }}${{ matrix.node == '22.x' && ' Node 22' || '' }} ${{ matrix.os == 'ubuntu-latest' && '🐧' || matrix.os == 'macos-latest' && '🍎' || '🪟' }}
     needs: build-wasm
     strategy:
       matrix:
+        node: ['20.x']
         os: [ubuntu-latest, macos-latest, windows-latest]
         package: 
           - { name: 'v13', path: 'versions/13', version: '13' }
@@ -86,7 +87,7 @@ jobs:
       - name: Setup Node.js 🌐
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node || '20.x' }}
+          node-version: ${{ matrix.node }}
 
       - name: Setup pnpm 📦
         uses: pnpm/action-setup@v2
