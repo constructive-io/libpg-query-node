@@ -67,6 +67,19 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     }
   });
 
+  // Each nesting level of normalize used to cross from WASM into JS and back,
+  // which V8 only makes cheap once an instance is warm: a fresh instance, like
+  // the one that replaces an overflowed one, stopped at about 770 terms.
+  it('normalizes deep nesting on an instance that just replaced an overflowed one', async () => {
+    await loadModule();
+    const chained = 'SELECT 1' + '+1'.repeat(3000);
+    const normalized = 'SELECT $1' + Array.from({ length: 3000 }, (_, i) => `+$${i + 2}`).join('');
+    for (let i = 0; i < 3; i++) {
+      assert.throws(() => lib.normalizeSync(DEEP), /stack depth limit exceeded/);
+      assert.equal(lib.normalizeSync(chained), normalized);
+    }
+  });
+
   // V8's native stack can run out inside a WASM call before libpg_query's own
   // check, e.g. in normalize, whose frames are larger there.
   it('reports a stack depth error, not a RangeError, for nesting too deep to parse', async () => {
