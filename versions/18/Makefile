@@ -18,8 +18,8 @@ WASM_STACK_SIZE ?= 33554432
 # libpg_query source, pinned to an exact commit so a release can be rebuilt
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
-LIBPG_QUERY_TAG := devin/1795671760-normalize-depth
-LIBPG_QUERY_COMMIT := 18457636e47930e5aedaf915087616ca7dd14056
+LIBPG_QUERY_TAG := devin/1795677500-fingerprint-frames
+LIBPG_QUERY_COMMIT := 847f6c095076388664b8cde6ea6e2b86fadb039d
 
 CACHE_DIR := .cache
 

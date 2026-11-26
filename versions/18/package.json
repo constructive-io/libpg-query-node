@@ -14,8 +14,8 @@
     "pgVersion": "18",
     "distTag": "pg18",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
-    "libpgQueryTag": "devin/1795671760-normalize-depth",
-    "libpgQueryCommit": "18457636e47930e5aedaf915087616ca7dd14056",
+    "libpgQueryTag": "devin/1795677500-fingerprint-frames",
+    "libpgQueryCommit": "847f6c095076388664b8cde6ea6e2b86fadb039d",
     "fullApi": true
   },
   "files": [
