@@ -213,6 +213,13 @@ function isStackOverflow(error: Error): boolean {
     || (error.name === 'InternalError' && /too much recursion/i.test(error.message));
 }
 
+function stackDepthError(cause: Error): SqlError {
+  const message = 'stack depth limit exceeded';
+  // Until its stack is formatted, the error's WASM frames keep the dropped instance alive.
+  void cause.stack;
+  return Object.assign(new SqlError(message, { message, cursorPosition: 0 }), { cause });
+}
+
 // An exception out of a WASM call (host stack overflow on deeply nested SQL, a
 // trap, or exit() once the heap limit is hit) skips libpg_query's cleanup and
 // leaves the instance corrupt, so replace it with a fresh one.
@@ -225,12 +232,7 @@ function callWasm(fn: () => number): number {
     if (proc) proc.exitCode = exitCode;
     if (error instanceof Error) {
       invalidateModule(error);
-      if (isStackOverflow(error)) {
-        const message = 'stack depth limit exceeded';
-        // Until its stack is formatted, the error's WASM frames keep the dropped instance alive.
-        void error.stack;
-        throw Object.assign(new SqlError(message, { message, cursorPosition: 0 }), { cause: error });
-      }
+      if (isStackOverflow(error)) throw stackDepthError(error);
       throw error;
     }
     const reason = typeof error === 'object' && error !== null
