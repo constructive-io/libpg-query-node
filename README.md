@@ -171,6 +171,20 @@ pnpm run test
   pnpm run clean && pnpm run build && pnpm run test
   ```
 
+### Release diff
+
+CI runs every pgsql-parser kitchen-sink and PL/pgSQL fixture, a set of deep and
+large generated inputs, and the PG 18 test suite through the last published
+`libpg-query` (`pg18` dist-tag) and the candidate build in `versions/18/wasm/`.
+Any output or error that changed fails the job unless
+`versions/18/release-diff.allow.json` names it with a reason.
+
+```bash
+pnpm run release-diff --major 18 [--baseline 18.1.5] [--fixtures ../pgsql-parser] [--skip-tests]
+```
+
+The report is printed and saved to `versions/18/.release-diff/report.json`.
+
 ### Slow recovery checks (local only)
 
 Run these after changing the WASM recovery code in `templates/`. Both use the
