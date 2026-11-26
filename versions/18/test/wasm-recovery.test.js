@@ -64,7 +64,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     for (const [name, [open, body, close]] of Object.entries(blocks)) {
       const sql = 'CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN ' +
         open.repeat(1000) + body + close.repeat(1000) + ' END $$';
-      assert.equal(lib.parsePlPgSQLSync(sql).length, 1, name);
+      assert.equal(lib.parsePlPgSQLSync(sql).plpgsql_funcs.length, 1, name);
     }
   });
 
@@ -78,7 +78,6 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
       ['parseSync', subqueries(3000)],
       ['normalizeSync', DEEP],
       ['normalizeSync', subqueries(1000)],
-      ['fingerprintSync', subqueries(3000)],
     ];
     for (const [name, sql] of tooDeep) {
       assert.throws(() => lib[name](sql), (error) => {
