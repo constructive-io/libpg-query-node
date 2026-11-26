@@ -6,9 +6,6 @@
   "main": "./wasm/index.cjs",
   "module": "./wasm/index.js",
   "typings": "./wasm/index.d.ts",
-  "engines": {
-    "node": ">=22"
-  },
   "publishConfig": {
     "access": "public"
   },
