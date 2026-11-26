@@ -84,7 +84,7 @@ async function evaluateQuery(page, { method, query, expectedParameters }) {
     try {
       result = await lib[method](query);
     } catch (e) {
-      error = { name: e.name, message: e.message, sqlError: e instanceof lib.SqlError };
+      error = { message: e.message, sqlError: e instanceof lib.SqlError, cause: e.cause?.message };
     }
     assertRecovered(lib.parseSync('SELECT 1'));
     assertRecovered(await lib.parse('SELECT 1'));
@@ -124,7 +124,7 @@ function assertLimit(error, version, name, publishedError) {
   }
 }
 
-async function measure(page, version, name, method, sql, floor, ceiling) {
+async function measure(page, version, name, method, sql, floor, ceiling, checkLimit) {
   const tryDepth = (depth, warmup) => probe(page, {
     depth,
     method,
@@ -141,18 +141,17 @@ async function measure(page, version, name, method, sql, floor, ceiling) {
   let high = ceiling / depthStep;
   const warmup = sql(floor);
   const limit = await tryDepth(ceiling, warmup);
-  let error = limit;
-  assert.ok(limit, `${version}: ${name} exceeded the depth search ceiling ${ceiling}`);
+  await checkLimit(limit, ceiling);
   while (high - low > 1) {
     const mid = Math.floor((low + high) / 2);
     const result = await tryDepth(mid * depthStep, warmup);
     if (!result) low = mid;
     else {
-      error = result;
+      await checkLimit(result, mid * depthStep);
       high = mid;
     }
   }
-  return { depth: low * depthStep, error, limit };
+  return { depth: low * depthStep, limit };
 }
 
 const engines = { firefox, webkit };
@@ -181,29 +180,35 @@ for (const [name, engine] of Object.entries(engines)) {
         // Don't retain browser resources from earlier searches. Each search
         // reloads the page and instantiates a fresh WASM heap for each probe.
         const pages = await openPages(subtest);
-        const run = version => measure(pages[version], version, label, method, sql, floor, ceiling);
-        let published = await run(baseline);
-        let candidate = await run('candidate');
-        if (candidate.depth < published.depth - depthStep) {
-          // A single measurement can straddle WebKit's concurrent WASM tier-up.
-          // Require the loss to reproduce in the median of three searches.
-          const median = results => results.sort((a, b) => a.depth - b.depth)[1];
-          published = median([published, await run(baseline), await run(baseline)]);
-          candidate = median([candidate, await run('candidate'), await run('candidate')]);
+        let published, candidate, publishedGrammar;
+        const run = version => measure(
+          pages[version], version, label, method, sql, floor, ceiling,
+          async (error, depth) => {
+            let diagnostic = published?.limit;
+            if (version === 'candidate' && method === 'normalizeSync' &&
+                grammarLimit.test(error?.message) && !grammarLimit.test(diagnostic?.message)) {
+              // The old normalizer may overflow before the underlying SQL grammar does.
+              publishedGrammar ??= probe(pages[baseline], {
+                method: 'parseSync', query: sql(ceiling), fresh: true,
+              });
+              diagnostic = await publishedGrammar;
+            }
+            assertLimit(error, version, `${label} at depth ${depth}`, diagnostic);
+          },
+        );
+        try {
+          published = await run(baseline);
+          candidate = await run('candidate');
+          if (candidate.depth < published.depth - depthStep) {
+            // A single measurement can straddle WebKit's concurrent WASM tier-up.
+            // Require the loss to reproduce in the median of three searches.
+            const median = results => results.sort((a, b) => a.depth - b.depth)[1];
+            published = median([published, await run(baseline), await run(baseline)]);
+            candidate = median([candidate, await run('candidate'), await run('candidate')]);
+          }
+        } finally {
+          rows.push(`| ${label} | ${published?.depth ?? 'not measured'} | ${candidate?.depth ?? 'not measured'} |`);
         }
-        rows.push(`| ${label} | ${published.depth} | ${candidate.depth} |`);
-        assertLimit(published.error, baseline, label);
-        assertLimit(published.limit, baseline, label);
-        let publishedDiagnostic = published.limit;
-        if (method === 'normalizeSync' && grammarLimit.test(candidate.limit.message) &&
-            !grammarLimit.test(publishedDiagnostic.message)) {
-          // The old normalizer may overflow before the underlying SQL grammar does.
-          publishedDiagnostic = await probe(pages[baseline], {
-            method: 'parseSync', query: sql(ceiling), fresh: true,
-          });
-        }
-        assertLimit(candidate.error, 'candidate', label, publishedDiagnostic);
-        assertLimit(candidate.limit, 'candidate', label, publishedDiagnostic);
         assert.ok(candidate.depth >= published.depth - depthStep,
           `${label}: depth fell from ${published.depth} to ${candidate.depth}`);
         if (method === 'normalizeSync') {
@@ -214,6 +219,8 @@ for (const [name, engine] of Object.entries(engines)) {
           // host overflow after warming the code, then exercise the replacement.
           const overflow = await probe(page, { method: 'parseSync', query: chained(32000) });
           assertLimit(overflow, 'candidate', label);
+          assert.match(overflow.cause ?? '', /call stack|too much recursion/i,
+            `${label}: expected a translated host stack overflow`);
           const depth = Math.max(floor, published.depth - depthStep);
           const afterOverflow = await probe(page, {
             method, query: sql(depth), expectedParameters: sql === chained ? depth + 1 : 1,
