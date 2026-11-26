@@ -186,7 +186,7 @@ function runTestFile(cwd, file, out) {
 // times out or fails outside a test is a difference too.
 async function runTests(cwd, files, label) {
   const results = new Map();
-  results.filesWithFailures = new Set();
+  results.fileOf = new Map();
   for (const file of files) {
     const out = path.join(workDir, `tests-${label}-${path.basename(file)}.jsonl`);
     fs.rmSync(out, { force: true });
@@ -195,10 +195,10 @@ async function runTests(cwd, files, label) {
     for (const line of output.split('\n')) {
       if (!line) continue;
       const { key, status } = JSON.parse(line);
-      if (status === 'fail') results.filesWithFailures.add(file);
       let unique = key;
       for (let n = 2; results.has(unique); n++) unique = `${key} #${n}`;
       results.set(unique, status);
+      results.fileOf.set(unique, file);
     }
   }
   return results;
@@ -212,12 +212,22 @@ async function diffTests(baselineDir) {
   fs.cpSync(path.join(versionDir, 'test'), path.join(baselineDir, 'test'), { recursive: true });
   const [baseline, candidate] = await Promise.all([runTests(baselineDir, files, 'baseline'), runTests(versionDir, files, 'candidate')]);
   const diffs = [];
+  const filesWithDiffs = new Set();
   for (const [key, status] of baseline) {
-    if (status !== 'pass') continue;
+    if (status !== 'pass' || files.includes(key)) continue;
     const now = candidate.get(key) || 'missing';
-    // A failing test already makes its file exit non-zero; report the test, not the file twice.
-    if (files.includes(key) && now.startsWith('exit') && candidate.filesWithFailures.has(key)) continue;
-    if (now !== 'pass') diffs.push({ id: `test:${key}`, baseline: { error: 'pass' }, candidate: { error: now } });
+    if (now !== 'pass') {
+      diffs.push({ id: `test:${key}`, baseline: { error: 'pass' }, candidate: { error: now } });
+      filesWithDiffs.add(baseline.fileOf.get(key));
+    }
+  }
+  // A test diff already explains its file's non-zero exit; any other exit
+  // (a crash after passing tests, a timeout) is a diff of its own.
+  for (const file of files) {
+    const now = candidate.get(file) || 'missing';
+    if (baseline.get(file) !== 'pass' || now === 'pass') continue;
+    if (now.startsWith('exit') && filesWithDiffs.has(file)) continue;
+    diffs.push({ id: `test:${file}`, baseline: { error: 'pass' }, candidate: { error: now } });
   }
   const skipped = files.filter((file) => baseline.get(file) === 'timeout');
   return { diffs, compared: baseline.size, skipped };
