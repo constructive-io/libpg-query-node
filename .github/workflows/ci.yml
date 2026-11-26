@@ -120,8 +120,6 @@ jobs:
     name: Release diff v18 vs published libpg-query 🔬
     needs: build-wasm
     runs-on: ubuntu-latest
-    env:
-      RELEASE_DIFF_BASELINE: '18.1.5'
     steps:
       - name: Checkout Repository 📥
         uses: actions/checkout@v4
