@@ -14,8 +14,8 @@
     "pgVersion": "18",
     "distTag": "pg18",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
-    "libpgQueryTag": "18-constructive",
-    "libpgQueryCommit": "f75f8010a8a75fe4645db550c5f8f435dbc938a3",
+    "libpgQueryTag": "devin/1795659186-wasm-stack-depth",
+    "libpgQueryCommit": "e92283de0a4e3225e4b307e12d801a6f3099c18f",
     "fullApi": true
   },
   "files": [
