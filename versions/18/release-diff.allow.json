@@ -5,7 +5,10 @@
       "id": [
         "edge:*:parse",
         "edge:*:normalize",
-        "edge:*:fingerprint"
+        "edge:*:fingerprint",
+        "edge:*:parseAsync",
+        "edge:*:normalizeAsync",
+        "edge:*:fingerprintAsync"
       ],
       "baseline": "18.2.7",
       "published": "stack depth limit exceeded",
@@ -15,7 +18,9 @@
     {
       "id": [
         "edge:*:parse",
-        "edge:*:scan"
+        "edge:*:scan",
+        "edge:*:parseAsync",
+        "edge:*:scanAsync"
       ],
       "baseline": "18.2.7",
       "published": "stack depth limit exceeded",
@@ -23,7 +28,10 @@
       "reason": "Same change: the candidate parses these now, and the RangeError is this script's JSON.stringify overflowing on the very deep parse tree"
     },
     {
-      "id": "edge:plpgsql-*:parsePlPgSQL",
+      "id": [
+        "edge:plpgsql-*:parsePlPgSQL",
+        "edge:plpgsql-*:parsePlPgSQLAsync"
+      ],
       "baseline": "18.2.7",
       "published": "Error: stack depth limit exceeded",
       "candidate": "ok",
@@ -35,12 +43,130 @@
         "edge:*:normalize",
         "edge:*:fingerprint",
         "edge:*:scan",
-        "edge:plpgsql-*:parsePlPgSQL"
+        "edge:plpgsql-*:parsePlPgSQL",
+        "edge:*:parseAsync",
+        "edge:*:normalizeAsync",
+        "edge:*:fingerprintAsync",
+        "edge:*:scanAsync",
+        "edge:plpgsql-*:parsePlPgSQLAsync"
       ],
       "baseline": "18.2.7",
       "published": "RangeError: Maximum call stack size exceeded",
       "candidate": "stack depth limit exceeded",
       "reason": "A host stack overflow inside the parser or JSON.parse is now reported as a stack depth error instead of a raw RangeError"
+    },
+    {
+      "id": [
+        "*:parse",
+        "*:parseAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "ok",
+      "ignoreKeys": [
+        "arg_location",
+        "conninfo_location",
+        "payload_location"
+      ],
+      "reason": "18.2.x adds location fields to DefElem, subscription and NOTIFY nodes (constructive-io/libpg_query fork patches)."
+    },
+    {
+      "id": [
+        "*:fingerprint",
+        "*:fingerprintAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "ok",
+      "reason": "18.2.5 took upstream fingerprint changes (role names, casts and set operations are fingerprinted differently). Changes since the last release still fail against the pg18 baseline."
+    },
+    {
+      "id": [
+        "kitchen-sink:misc/multiline-string-literals-103.sql:normalize",
+        "kitchen-sink:misc/multiline-string-literals-103.sql:normalizeAsync",
+        "kitchen-sink:misc/multiline-string-literals-104.sql:normalize",
+        "kitchen-sink:misc/multiline-string-literals-104.sql:normalizeAsync",
+        "kitchen-sink:misc/multiline-string-literals-105.sql:normalize",
+        "kitchen-sink:misc/multiline-string-literals-105.sql:normalizeAsync",
+        "kitchen-sink:misc/literal-escaping-8.sql:normalize",
+        "kitchen-sink:misc/literal-escaping-8.sql:normalizeAsync",
+        "kitchen-sink:latest/postgres/create_function_sql-57.sql:normalize",
+        "kitchen-sink:latest/postgres/create_function_sql-57.sql:normalizeAsync",
+        "kitchen-sink:latest/postgres/create_function_sql-61.sql:normalize",
+        "kitchen-sink:latest/postgres/create_function_sql-61.sql:normalizeAsync",
+        "kitchen-sink:latest/postgres/create_function_sql-64.sql:normalize",
+        "kitchen-sink:latest/postgres/create_function_sql-64.sql:normalizeAsync",
+        "kitchen-sink:latest/postgres/create_function_sql-98.sql:normalize",
+        "kitchen-sink:latest/postgres/create_function_sql-98.sql:normalizeAsync",
+        "plpgsql:plpgsql_transaction-7.sql:normalize",
+        "plpgsql:plpgsql_transaction-7.sql:normalizeAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "ok",
+      "reason": "18.2.5 normalize takes constant locations from the parser (upstream), so constants inside a SQL function body are no longer replaced."
+    },
+    {
+      "id": [
+        "plpgsql:*:parsePlPgSQL",
+        "plpgsql:*:parsePlPgSQLAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "ok",
+      "ignoreKeys": [
+        "default_val",
+        "PLpgSQL_expr",
+        "query",
+        "parseMode",
+        "notnull",
+        "promise",
+        "PLpgSQL_var",
+        "PLpgSQL_rec",
+        "dno"
+      ],
+      "reason": "18.2.x PL/pgSQL fixes: record defaults, NOT NULL, promise variables and row-typed variables are reported."
+    },
+    {
+      "id": [
+        "plpgsql:*:parsePlPgSQL",
+        "plpgsql:*:parsePlPgSQLAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "Error: Not implemented (SearchSysCache1*",
+      "candidate": "ok",
+      "reason": "18.2.x parses PL/pgSQL that needed a catalog lookup on 18.1.5."
+    },
+    {
+      "id": [
+        "edge:*:fingerprint",
+        "edge:*:normalize",
+        "edge:*:fingerprintAsync",
+        "edge:*:normalizeAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "ok",
+      "candidate": "memory exhausted at or near *",
+      "reason": "18.1.5 returned the parser error text as the fingerprint or normalized query instead of throwing; 18.2.6 throws it."
+    },
+    {
+      "id": [
+        "edge:unclosed-parens-*:fingerprint",
+        "edge:unclosed-parens-*:normalize",
+        "edge:unclosed-parens-*:fingerprintAsync",
+        "edge:unclosed-parens-*:normalizeAsync"
+      ],
+      "baseline": "18.1.5",
+      "published": "Error: syntax error at end of input",
+      "candidate": "syntax error at end of input",
+      "reason": "fingerprint and normalize errors are SqlError with details since 18.2.x, as parse errors already were."
+    },
+    {
+      "id": "edge:*",
+      "baseline": "18.1.5",
+      "published": "RangeError: Maximum call stack size exceeded",
+      "candidate": "stack depth limit exceeded",
+      "reason": "Too-deep input is a clean stack depth error instead of a V8 stack overflow."
     }
   ]
 }
