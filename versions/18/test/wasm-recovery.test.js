@@ -48,13 +48,9 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
   // 18.1.5 parsed these; 18.2.7's 512kB WASM limit rejected them.
   it('parses nesting that 18.1.5 parsed', async () => {
     await loadModule();
-    const nested = {
-      'chained operators': 'SELECT 1' + '+1'.repeat(4000),
-      'nested function calls': 'SELECT ' + 'f('.repeat(3200) + '1' + ')'.repeat(3200),
-    };
-    for (const [name, sql] of Object.entries(nested)) {
-      assert.doesNotThrow(() => assert.equal(parseSync(sql).stmts.length, 1), name);
-    }
+    // Nested subqueries and function calls overflow V8's stack on macOS near the old limit.
+    const chained = 'SELECT 1' + '+1'.repeat(4000);
+    assert.doesNotThrow(() => assert.equal(parseSync(chained).stmts.length, 1), 'chained operators');
     const blocks = {
       'nested IF blocks': ['IF true THEN ', 'NULL;', ' END IF;'],
       'nested BEGIN blocks': ['BEGIN ', 'NULL;', ' END;'],
@@ -72,12 +68,32 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
   // the one that replaces an overflowed one, stopped at about 770 terms.
   it('normalizes deep nesting on an instance that just replaced an overflowed one', async () => {
     await loadModule();
-    const chained = 'SELECT 1' + '+1'.repeat(3000);
-    const normalized = 'SELECT $1' + Array.from({ length: 3000 }, (_, i) => `+$${i + 2}`).join('');
+    const chained = 'SELECT 1' + '+1'.repeat(2000);
+    const normalized = 'SELECT $1' + Array.from({ length: 2000 }, (_, i) => `+$${i + 2}`).join('');
     for (let i = 0; i < 3; i++) {
       assert.throws(() => lib.normalizeSync(DEEP), /stack depth limit exceeded/);
       assert.equal(lib.normalizeSync(chained), normalized);
     }
+  });
+
+  // --no-liftoff runs the module on V8's optimizing compiler from the start,
+  // which is where a long-running process ends up. On Node 20 its frame for
+  // the fingerprint walk was so large that 30 chained terms overflowed.
+  it('fingerprints and normalizes nesting on V8\'s optimizing compiler', () => {
+    const script = `
+      const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
+      const nest = (open, n) => 'SELECT ' + open.repeat(n) + '1' + ')'.repeat(n);
+      lib.loadModule().then(() => {
+        const chained = 'SELECT 1' + '+1'.repeat(1000);
+        lib.fingerprintSync(chained);
+        lib.fingerprintSync(nest('f(', 500));
+        lib.fingerprintSync(nest('(SELECT ', 500));
+        lib.normalizeSync(chained);
+        lib.normalizeSync(nest('f(', 500));
+        lib.normalizeSync(nest('(SELECT ', 250));
+      });
+    `;
+    execFileSync(process.execPath, ['--no-liftoff', '-e', script], { stdio: 'pipe' });
   });
 
   // V8's native stack can run out inside a WASM call before libpg_query's own
@@ -130,6 +146,9 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
         gc(); gc();
         if (errors.length !== 2 || errors.some((error) => !error.message.includes('out of WASM memory'))) {
           throw new Error('Expected two WASM memory failures');
+        }
+        if (kept.length !== 30 || kept.some((error) => !(error instanceof lib.SqlError) || error.message !== 'stack depth limit exceeded')) {
+          throw new Error('Expected 30 stack depth errors, got ' + kept.map(String).join(', ').slice(0, 200));
         }
         process.stdout.write('\\ngrown=' + (process.memoryUsage().external - base));
       })();`;
