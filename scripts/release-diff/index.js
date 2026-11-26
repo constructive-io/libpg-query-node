@@ -186,6 +186,7 @@ function runTestFile(cwd, file, out) {
 // times out or fails outside a test is a difference too.
 async function runTests(cwd, files, label) {
   const results = new Map();
+  results.filesWithFailures = new Set();
   for (const file of files) {
     const out = path.join(workDir, `tests-${label}-${path.basename(file)}.jsonl`);
     fs.rmSync(out, { force: true });
@@ -194,6 +195,7 @@ async function runTests(cwd, files, label) {
     for (const line of output.split('\n')) {
       if (!line) continue;
       const { key, status } = JSON.parse(line);
+      if (status === 'fail') results.filesWithFailures.add(file);
       let unique = key;
       for (let n = 2; results.has(unique); n++) unique = `${key} #${n}`;
       results.set(unique, status);
@@ -213,6 +215,8 @@ async function diffTests(baselineDir) {
   for (const [key, status] of baseline) {
     if (status !== 'pass') continue;
     const now = candidate.get(key) || 'missing';
+    // A failing test already makes its file exit non-zero; report the test, not the file twice.
+    if (files.includes(key) && now.startsWith('exit') && candidate.filesWithFailures.has(key)) continue;
     if (now !== 'pass') diffs.push({ id: `test:${key}`, baseline: { error: 'pass' }, candidate: { error: now } });
   }
   const skipped = files.filter((file) => baseline.get(file) === 'timeout');
