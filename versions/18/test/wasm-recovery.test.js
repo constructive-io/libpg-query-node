@@ -45,6 +45,53 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     }
   });
 
+  // 18.1.5 parsed these; 18.2.7's 512kB WASM limit rejected them.
+  it('parses nesting that 18.1.5 parsed', async () => {
+    await loadModule();
+    const nested = {
+      'chained operators': 'SELECT 1' + '+1'.repeat(4000),
+      'nested subqueries': 'SELECT ' + '(SELECT '.repeat(1500) + '1' + ')'.repeat(1500),
+      'nested function calls': 'SELECT ' + 'f('.repeat(3500) + '1' + ')'.repeat(3500),
+    };
+    for (const [name, sql] of Object.entries(nested)) {
+      assert.equal(parseSync(sql).stmts.length, 1, name);
+    }
+    const blocks = {
+      'nested IF blocks': ['IF true THEN ', 'NULL;', ' END IF;'],
+      'nested BEGIN blocks': ['BEGIN ', 'NULL;', ' END;'],
+      'nested loops': ['LOOP ', 'EXIT;', ' END LOOP;'],
+    };
+    for (const [name, [open, body, close]] of Object.entries(blocks)) {
+      const sql = 'CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN ' +
+        open.repeat(1000) + body + close.repeat(1000) + ' END $$';
+      assert.equal(lib.parsePlPgSQLSync(sql).length, 1, name);
+    }
+  });
+
+  // V8's native stack can run out inside a WASM call before libpg_query's own
+  // check, e.g. in normalize, whose frames are larger there.
+  it('reports a stack depth error, not a RangeError, for nesting too deep to parse', async () => {
+    await loadModule();
+    const subqueries = (n) => 'SELECT ' + '(SELECT '.repeat(n) + '1' + ')'.repeat(n);
+    const tooDeep = [
+      ['parseSync', DEEP],
+      ['parseSync', subqueries(3000)],
+      ['normalizeSync', DEEP],
+      ['normalizeSync', subqueries(1000)],
+      ['fingerprintSync', subqueries(3000)],
+    ];
+    for (const [name, sql] of tooDeep) {
+      assert.throws(() => lib[name](sql), (error) => {
+        assert.ok(error instanceof lib.SqlError, `${name}: ${error}`);
+        assert.equal(error.message, 'stack depth limit exceeded');
+        return true;
+      });
+      assert.equal(parseSync('SELECT 1').stmts.length, 1);
+    }
+    await assert.rejects(lib.normalize(DEEP), lib.SqlError);
+    assert.equal((await parse('SELECT 1')).stmts.length, 1);
+  });
+
   it('frees replaced WASM heaps even when callers keep the errors', () => {
     const script = `const lib = require(${JSON.stringify(require.resolve('../wasm/index.cjs'))});
       (async () => {
@@ -206,7 +253,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
 });
 
 // Every entry point, with the next WASM call made to throw: a RangeError
-// stands for a stack overflow, a non-Error object for Emscripten's ExitStatus.
+// stands for a trap or a stack overflow, a non-Error object for Emscripten's ExitStatus.
 describe('Recovery from a throw in each entry point', { timeout: 120000 }, () => {
   const PLPGSQL = 'CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END $$ LANGUAGE plpgsql';
   const entryPoints = [
@@ -281,7 +328,7 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
     await isolated.loadModule();
     const loadsBefore = loads;
     for (let i = 0; i < 60; i++) {
-      throwNext = new RangeError('Maximum call stack size exceeded');
+      throwNext = new RangeError('WASM trap');
       assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
       const failed = used;
       assert.equal(isolated.parseSync('SELECT 1').stmts.length, 1);
@@ -292,10 +339,10 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
 
   it('makes loadModule() and queued calls wait again when a queued call breaks the fresh instance', async () => {
     await isolated.loadModule();
-    throwNext = new RangeError('Maximum call stack size exceeded');
+    throwNext = new RangeError('WASM trap');
     assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     const failing = isolated.parse('SELECT 1');
-    throwNext = new RangeError('Maximum call stack size exceeded');
+    throwNext = new RangeError('WASM trap');
     const ready = isolated.loadModule();
     const after = isolated.parse('SELECT 1');
     await assert.rejects(failing, RangeError);
@@ -308,10 +355,10 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
 
   it('makes loadModule() wait again when a call queued ahead of it breaks the fresh instance', async () => {
     await isolated.loadModule();
-    throwNext = new RangeError('Maximum call stack size exceeded');
+    throwNext = new RangeError('WASM trap');
     assert.throws(() => isolated.parseSync('SELECT 1'), RangeError);
     const failing = isolated.parse('SELECT 1');
-    throwNext = new RangeError('Maximum call stack size exceeded');
+    throwNext = new RangeError('WASM trap');
     const ready = isolated.loadModule();
     await assert.rejects(failing, RangeError);
     await ready;
@@ -342,8 +389,16 @@ describe('Recovery from a throw in each entry point', { timeout: 120000 }, () =>
     const skip = typeof isolated[name] !== 'function' && 'not in this build';
 
     it(`${name}: rethrows the original Error and recovers`, { skip }, async () => {
-      const thrown = new RangeError('Maximum call stack size exceeded');
+      const thrown = new RangeError('WASM trap');
       assert.equal(await failOnce(name, query, thrown), thrown);
+    });
+
+    it(`${name}: reports a V8 stack overflow as a stack depth error and recovers`, { skip }, async () => {
+      const thrown = new RangeError('Maximum call stack size exceeded');
+      const caught = await failOnce(name, query, thrown);
+      assert.ok(caught instanceof isolated.SqlError);
+      assert.equal(caught.message, 'stack depth limit exceeded');
+      assert.equal(caught.cause, thrown);
     });
 
     it(`${name}: wraps a non-Error throw in an Error and recovers`, { skip }, async () => {
@@ -368,7 +423,7 @@ function loadTrapping(failLoad) {
       if (trapHeapSize === undefined) return parseRaw(...callArgs);
       if (trapHeapSize) module.HEAPU8 = { length: trapHeapSize };
       trapHeapSize = undefined;
-      throw new RangeError('Maximum call stack size exceeded');
+      throw new RangeError('WASM trap');
     };
   }, failLoad);
   isolated.trapNext = (heapSize = 0) => { trapHeapSize = heapSize; };
