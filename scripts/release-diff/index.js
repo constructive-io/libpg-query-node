@@ -103,6 +103,7 @@ function runCollector(baselineDir, baselineVersion, inputsFile, start) {
     child.on('error', reject);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      testGroups.delete(child.pid);
       resolve({ lines, code, signal, stderr });
     });
   });
@@ -145,6 +146,16 @@ function testFiles() {
 // One file at a time with a wall-clock limit: a WASM call that never returns
 // blocks the event loop, so node:test's own timeouts can't stop it. The file
 // runs in its own process group so a timeout kills node:test's workers too.
+const testGroups = new Set();
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    for (const pid of testGroups) {
+      try { process.kill(-pid, 'SIGKILL'); } catch (e) {}
+    }
+    process.exit(1);
+  });
+}
+
 function runTestFile(cwd, file, out) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
@@ -153,6 +164,7 @@ function runTestFile(cwd, file, out) {
       `--test-reporter-destination=${out}`,
       file,
     ], { cwd, stdio: 'ignore', detached: true });
+    testGroups.add(child.pid);
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -161,6 +173,7 @@ function runTestFile(cwd, file, out) {
     child.on('error', reject);
     child.on('close', (code) => {
       clearTimeout(timer);
+      testGroups.delete(child.pid);
       resolve({
         status: timedOut ? 'timeout' : code === 0 ? 'pass' : `exit ${code}`,
         output: fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '',
