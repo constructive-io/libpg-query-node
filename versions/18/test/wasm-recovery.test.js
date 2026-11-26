@@ -31,26 +31,18 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     assert.equal(parseSync('SELECT 1').stmts.length, 1);
   });
 
-  // 18.2.x left the WASM build at the 100kB default limit, so it rejected nesting
-  // that 18.1.x and native builds parse.
+  // Depths 18.1.5 parsed. Nested subqueries and function calls stay lower:
+  // they overflow V8's stack on macOS first.
   it('parses nesting within the stack depth limit', async () => {
     await loadModule();
     const nested = {
-      'chained operators': 'SELECT 1' + '+1'.repeat(2000),
+      'chained operators': 'SELECT 1' + '+1'.repeat(4000),
       'nested subqueries': 'SELECT ' + '(SELECT '.repeat(1000) + '1' + ')'.repeat(1000),
       'nested function calls': 'SELECT ' + 'f('.repeat(2000) + '1' + ')'.repeat(2000),
     };
     for (const [name, sql] of Object.entries(nested)) {
       assert.equal(parseSync(sql).stmts.length, 1, name);
     }
-  });
-
-  // 18.1.5 parsed these; 18.2.7's 512kB WASM limit rejected them.
-  it('parses nesting that 18.1.5 parsed', async () => {
-    await loadModule();
-    // Nested subqueries and function calls overflow V8's stack on macOS near the old limit.
-    const chained = 'SELECT 1' + '+1'.repeat(4000);
-    assert.doesNotThrow(() => assert.equal(parseSync(chained).stmts.length, 1), 'chained operators');
     const blocks = {
       'nested IF blocks': ['IF true THEN ', 'NULL;', ' END IF;'],
       'nested BEGIN blocks': ['BEGIN ', 'NULL;', ' END;'],
@@ -59,7 +51,7 @@ describe('Recovery after the WASM parser throws', { timeout: 120000 }, () => {
     for (const [name, [open, body, close]] of Object.entries(blocks)) {
       const sql = 'CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN ' +
         open.repeat(1000) + body + close.repeat(1000) + ' END $$';
-      assert.doesNotThrow(() => assert.equal(lib.parsePlPgSQLSync(sql).plpgsql_funcs.length, 1), name);
+      assert.equal(lib.parsePlPgSQLSync(sql).plpgsql_funcs.length, 1, name);
     }
   });
 
