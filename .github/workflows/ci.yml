@@ -116,6 +116,39 @@ jobs:
         run: pnpm run test
         working-directory: ${{ matrix.package.path }}
 
+  browser-depth:
+    name: Test v18 WASM depth in ${{ matrix.browser }}
+    needs: build-wasm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: firefox
+            os: ubuntu-latest
+          - browser: webkit
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.1
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts-v18
+          path: versions/18/wasm/
+      - run: pnpm --dir versions/18 exec playwright install --with-deps "$BROWSER"
+        env:
+          BROWSER: ${{ matrix.browser }}
+      - run: pnpm --dir versions/18 test:browser
+        env:
+          BROWSER: ${{ matrix.browser }}
+
   release-diff:
     name: Release diff v18 vs published libpg-query 🔬
     needs: build-wasm
