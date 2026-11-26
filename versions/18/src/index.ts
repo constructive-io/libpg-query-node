@@ -205,7 +205,15 @@ function invalidateModule(error: unknown): void {
   wasmModule = undefined;
 }
 
-// An exception out of a WASM call (V8 stack overflow on deeply nested SQL, a
+// The host engine's native stack (V8 and JSC: RangeError, Firefox:
+// InternalError) can run out inside a WASM call before libpg_query's own
+// stack depth check, which only measures the WASM stack.
+function isStackOverflow(error: Error): boolean {
+  return (error instanceof RangeError && /call stack/i.test(error.message))
+    || (error.name === 'InternalError' && /too much recursion/i.test(error.message));
+}
+
+// An exception out of a WASM call (host stack overflow on deeply nested SQL, a
 // trap, or exit() once the heap limit is hit) skips libpg_query's cleanup and
 // leaves the instance corrupt, so replace it with a fresh one.
 function callWasm(fn: () => number): number {
@@ -217,6 +225,10 @@ function callWasm(fn: () => number): number {
     if (proc) proc.exitCode = exitCode;
     if (error instanceof Error) {
       invalidateModule(error);
+      if (isStackOverflow(error)) {
+        const message = 'stack depth limit exceeded';
+        throw Object.assign(new SqlError(message, { message, cursorPosition: 0 }), { cause: error });
+      }
       throw error;
     }
     const reason = typeof error === 'object' && error !== null

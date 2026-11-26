@@ -18,8 +18,8 @@ WASM_STACK_SIZE ?= 33554432
 # libpg_query source, pinned to an exact commit so a release can be rebuilt
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
-LIBPG_QUERY_TAG := 18-constructive
-LIBPG_QUERY_COMMIT := 7791971be1fc169d3f1b0d1ec887dc3f134ad134
+LIBPG_QUERY_TAG := devin/1795668138-wasm-full-stack
+LIBPG_QUERY_COMMIT := f975bb56d6b93b9ce23135da66cee81308ec3a98
 
 CACHE_DIR := .cache
 
