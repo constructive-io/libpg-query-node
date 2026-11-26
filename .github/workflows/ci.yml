@@ -119,6 +119,40 @@ jobs:
         run: pnpm run test
         working-directory: ${{ matrix.package.path }}
 
+  browser-depth:
+    name: Test v18 WASM depth in ${{ matrix.browser }}
+    needs: build-wasm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: firefox
+            os: ubuntu-latest
+          - browser: webkit
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      WASM_TEST_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.1
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts-v18
+          path: versions/18/wasm/
+      - if: runner.os == 'Linux'
+        run: pnpm --dir versions/18 exec playwright install --with-deps "$WASM_TEST_BROWSER"
+      - if: runner.os == 'macOS'
+        run: pnpm --dir versions/18 exec playwright install "$WASM_TEST_BROWSER"
+      - run: pnpm --dir versions/18 test:browser
+
   build-parser:
     name: Build Parser Package 📦
     needs: build-wasm

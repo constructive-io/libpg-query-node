@@ -31,7 +31,8 @@
     "wasm:rebuild": "pnpm wasm:make rebuild",
     "wasm:clean": "pnpm wasm:make clean",
     "wasm:clean-cache": "pnpm wasm:make clean-cache",
-    "test": "node --test test/parsing.test.js test/pg18.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js test/limits.test.js test/snapshots.test.js test/load-module.test.js"
+    "test": "node --test test/parsing.test.js test/pg18.test.js test/fingerprint.test.js test/normalize.test.js test/plpgsql.test.js test/scan.test.js test/errors.test.js test/input-encoding.test.js test/wasm-recovery.test.js test/limits.test.js test/snapshots.test.js test/load-module.test.js",
+    "test:browser": "node --test test/wasm-depth.browser.test.js"
   },
   "author": "Constructive <developers@constructive.io>",
   "license": "MIT",
@@ -39,7 +40,11 @@
     "type": "git",
     "url": "git://github.com/constructive-io/libpg-query-node.git"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "esbuild-wasm": "0.27.7",
+    "libpg-query-baseline": "npm:libpg-query@18.1.5",
+    "playwright": "1.61.1"
+  },
   "dependencies": {
     "@pgsql/types": "^18.0.0"
   },

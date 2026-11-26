@@ -2,6 +2,36 @@
   "allow": [
     {
       "id": [
+        "edge:plpgsql-if-blocks-5000:parsePlPgSQL",
+        "edge:plpgsql-if-blocks-10000:parsePlPgSQL"
+      ],
+      "baseline": "18.2.7",
+      "published": "Error: memory exhausted at or near \"THEN\"",
+      "candidate": "SqlError: memory exhausted at or near \"THEN\"",
+      "reason": "The PostgreSQL grammar limit is reported as a SqlError with its existing diagnostic"
+    },
+    {
+      "id": [
+        "edge:plpgsql-begin-blocks-5000:parsePlPgSQL",
+        "edge:plpgsql-begin-blocks-10000:parsePlPgSQL"
+      ],
+      "baseline": "18.2.7",
+      "published": "Error: memory exhausted at or near \"BEGIN\"",
+      "candidate": "SqlError: memory exhausted at or near \"BEGIN\"",
+      "reason": "The PostgreSQL grammar limit is reported as a SqlError with its existing diagnostic"
+    },
+    {
+      "id": [
+        "edge:plpgsql-loops-5000:parsePlPgSQL",
+        "edge:plpgsql-loops-10000:parsePlPgSQL"
+      ],
+      "baseline": "18.2.7",
+      "published": "Error: memory exhausted at or near \"LOOP\"",
+      "candidate": "SqlError: memory exhausted at or near \"LOOP\"",
+      "reason": "The PostgreSQL grammar limit is reported as a SqlError with its existing diagnostic"
+    },
+    {
+      "id": [
         "edge:*:parse",
         "edge:*:normalize",
         "edge:*:fingerprint"

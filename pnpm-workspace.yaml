@@ -25,7 +25,7 @@ packages:
 # Most malicious releases are found and yanked well inside that window.
 minimumReleaseAge: 2880
 
-# Exempt from the wait: 6 scope glob(s), 5 first-party package(s).
+# Exempt from the wait: 6 scope glob(s), 6 first-party package(s).
 # First-party membership comes from what pyramation publishes on npm — waiting on your own release protects nothing.
 minimumReleaseAgeExclude:
   - "@constructive-db/*"
@@ -34,6 +34,7 @@ minimumReleaseAgeExclude:
   - "@pgpm/*"
   - "@pgpmjs/*"
   - "@pgsql/*"
+  - libpg-query
   - nested-obj
   - pg-proto-parser
   - pnpm-policy
