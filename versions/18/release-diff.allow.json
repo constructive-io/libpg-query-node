@@ -70,6 +70,16 @@
       "published": "RangeError: Maximum call stack size exceeded",
       "candidate": "stack depth limit exceeded",
       "reason": "A host stack overflow inside the parser or JSON.parse is now reported as a stack depth error instead of a raw RangeError"
+    },
+    {
+      "id": [
+        "edge:*:normalize",
+        "edge:*:fingerprint"
+      ],
+      "baseline": "18.2.7",
+      "published": "RangeError: Maximum call stack size exceeded",
+      "candidate": "ok",
+      "reason": "Normalize no longer goes through a JavaScript call per nesting level, and the fingerprint walk no longer has one very large frame per level, so both handle deeper SQL before V8's stack runs out"
     }
   ]
 }
