@@ -1,6 +1,7 @@
 // versions/<major>/release-diff.allow.json: the differences a release intends.
 //
-//   { "allow": [{
+//   { "reference": "18.1.5",                // compared too, besides the last release
+//     "allow": [{
 //       "id": "kitchen-sink:*:fingerprint",  // input:function, `*` matches anything; or a list
 //       "reason": "why the release changes this",
 //       "baseline": "18.1.5",                // optional: only against this release

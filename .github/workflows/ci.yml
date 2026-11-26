@@ -164,7 +164,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-diff-v18
-          path: versions/18/.release-diff/report.json
+          path: versions/18/.release-diff/report-*.json
           if-no-files-found: ignore
           retention-days: 7
 
