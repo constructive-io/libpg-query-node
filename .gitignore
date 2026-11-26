@@ -26,3 +26,4 @@ npm-debug.log
 .claude
 .openhands/
 .DS_Store
+versions/*/.release-diff/

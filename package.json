@@ -28,6 +28,7 @@
     "copy:templates": "node scripts/copy-templates.js",
     "test:stress": "node scripts/test-stress.js",
     "test:mutations": "node scripts/test-mutations.js",
+    "release-diff": "node scripts/release-diff",
     "build:parser": "pnpm --filter @pgsql/parser build",
     "build:parser:lts": "PARSER_BUILD_TYPE=lts pnpm --filter @pgsql/parser build",
     "build:parser:full": "PARSER_BUILD_TYPE=full pnpm --filter @pgsql/parser build",
