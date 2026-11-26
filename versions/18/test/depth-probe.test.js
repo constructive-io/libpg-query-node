@@ -17,7 +17,7 @@ async function measure(lib) {
   for (const [form, make] of Object.entries(forms)) {
     for (const fn of fns[form]) {
       let lo = 1, hi = 20000, err = '';
-      const ok = (n) => { try { lib[fn](make(n)); return true; } catch (e) { err = `${e.name}: ${e.message}`.slice(0, 50); return false; } };
+      const ok = (n) => { try { const r = lib[fn](make(n)); if (typeof r === 'string' && /memory exhausted|stack depth/.test(r)) { err = 'returned ' + r.slice(0, 40); return false; } return true; } catch (e) { err = `${e.name}: ${e.message}`.slice(0, 50); return false; } };
       if (ok(hi)) { rows.push(`${form} ${fn}: >= ${hi}`); continue; }
       ok(hi);
       const top = err;
