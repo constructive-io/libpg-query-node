@@ -19,7 +19,7 @@ WASM_STACK_SIZE ?= 33554432
 # byte-for-byte. Set in package.json `x-publish` and applied by copy:templates.
 LIBPG_QUERY_REPO := https://github.com/constructive-io/libpg_query.git
 LIBPG_QUERY_TAG := devin/1795677500-fingerprint-frames
-LIBPG_QUERY_COMMIT := 847f6c095076388664b8cde6ea6e2b86fadb039d
+LIBPG_QUERY_COMMIT := 6a095a06087c62a04d7ccb5bc608173138b59f5c
 
 CACHE_DIR := .cache
 

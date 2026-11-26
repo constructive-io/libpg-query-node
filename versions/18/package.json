@@ -15,7 +15,7 @@
     "distTag": "pg18",
     "libpgQueryRepo": "https://github.com/constructive-io/libpg_query.git",
     "libpgQueryTag": "devin/1795677500-fingerprint-frames",
-    "libpgQueryCommit": "847f6c095076388664b8cde6ea6e2b86fadb039d",
+    "libpgQueryCommit": "6a095a06087c62a04d7ccb5bc608173138b59f5c",
     "fullApi": true
   },
   "files": [
